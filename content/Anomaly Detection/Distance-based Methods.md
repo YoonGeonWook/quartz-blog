@@ -1,0 +1,194 @@
+---
+sticker: emoji//1f4d5
+banner: Anomaly Detection/image/distance_1.png
+tags:
+  - Anomaly_Detection
+  - 이상탐지
+  - distance_based
+  - 거리기반
+---
+# 🎲 Distance-based Methods
+
+## 🎯 $k$ - Nearest Neighbor-based Anomaly Detection
+
+### $k$ - Nearest Neighbor-based Approach
+
+![](assets/Distance-based%20Methods/Pasted%20image%2020240117192157.png)
+
+이러한 거리 기반 이상 탐지 기법들은 이상치는 정상적인 다른 데이터들과는 멀리 떨어져 있고, 정상 데이터는 주변 가까이에 다른 데이터가 많이 있을 것이란 가정을 깔고 있다. 
+
+- [ㅌ] 핵심 : 정상 데이터 (normal class)에 어떠한 사전 확률 분포도 가정하지 않음 - Nonparametric method
+- [ㅌ] $k$ 개의 이웃들에 대한 거리 정보를 기반으로 abnormal scores를 계산 
+
+#### Various distance information used for anomaly score
+
+Parzen window density estimation 에서는 아래의 식 중 $V$ (관심 영역 $R$의 volume)를 고정시키고 $k$ 를 구했다: $$p(x)=\frac{k}{N\cdot V}$$
+반대로 KNN 기반 방법은 $k$ 를 고정시키고 그 $k$ 를 커버하는 $V$ 를 찾고자하여 확률 밀도를 추정하는 개념이다. 그런데 이 volume $V$ 를 개념을 정의하기 위해서, 즉 $k$ 번째 거리를 측정하는 여러 가지 방법이 존재한다. 
+
+- [ㅌ] Maximum distance to the $k$ -th nearest neighbor 
+	- k 번째 이웃까지 최대 거리 $$d_{\max}^k = \kappa(\mathbf{x}) = ||\mathbf{x}-z_k(\mathbf{x})||$$
+- [ㅌ] Average distance to the $k$ -th nearest neighbors
+	- $k$ 개의 이웃들의 평균 거리 $$d_{avg}^k=\gamma(\mathbf{x})=\frac{1}{k}\sum_{j=1}^k||\mathbf{x}-z_j(\mathbf{x})||$$
+- [ㅌ] Distance to the mean of the $k$ -th nearest neighbors
+	- $k$ 개의 이웃들의 중심과의 거리 $$d_{mean}^k=\delta(\mathbf{x})=\left|\left|\mathbf{x} - \frac{1}{k}\sum_{j=1}^kz_j(\mathbf{x})\right|\right|$$
+Maximum, average, mean 거리 3개를 비교해보면 다음과 같다 : 
+![](assets/Distance-based%20Methods/Pasted%20image%2020240117193757.png)
+
+여기서 $k=5$ 이고, 위 4개 그림 모두 maximum distance $d_\max^5 = 5.0$ 이다. (a)와 (b)를 보면 average distance가 각각 4.2, 2.6 으로 다르다. (c)와 (d)에서는 둘 다 average score는 4.4로 동일하지만, (c) 그림은 이웃들이 왼쪽으로 몰려있고, (d)는 이웃들이 가운데 점을 기준으로 고루 분포되어 있다. 그에 따라 mean score는 각각 3.3, 2.1로 다르다. 
+
+#### Counter example (반례) of the previous anomaly scores
+
+- [ㅌ] 아래 그림에서, Case A와 Case B 각각을 보았을 때 (<font style="color:blue">파란색 네모 □</font>들이 reference data),  <font style="color:red"> 세모 △</font> 와 <font style="color:red">동그라미 ○</font> 중 이상치로 판단될 가능성이 높은 객체는 무엇인가?
+
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118164211.png)
+
+- 2가지 관점 : 
+	- 위 그림에서 (주황색으로 된) 가까운 이웃들로 이루어진 polygon 을 만들었을 때, 정상 데이터는 적어도 이 이웃들로 구성된 polygon 안에 들어와야 하지 않을까? - Case B의 <font style="color:red"> 세모 △</font>
+	- 이렇게 이웃들로 구성된 polygon 안에 들어와 있지 않더라도, 그 polygon 까지의 거리가 짧아야 정상 데이터이지 않을까?
+		- 이러한 관점에선, Case A의 <font style="color:red"> 세모 △</font> 가 <font style="color:red">동그라미 ○</font> 보다 abnormal score 가 더 낮게 나타나야 함 
+
+|           |                       | $d_{max}^k$ | $d_{avg}^k$ | $d_{mean}^k$ |
+|:----------|:----------------------|:------------|:------------|:-------------|
+| A $(k=4)$ | Circle&nbsp;○         |        1.58 |        <font style="color:red">1.14</font> |         0.50 |
+|           | Triangle&nbsp;△&nbsp; |        <font style="color:red">1.64</font> |        1.07 |         <font style="color:red">0.94</font> |
+| B $(k=5)$ | Circle&nbsp;○         |        1.56 |        1.08 |         0.80 |
+|           | Triangle&nbsp;△&nbsp; |        <font style="color:red">1.86</font> |        <font style="color:red">1.09</font> |         <font style="color:red">0.88</font> |  
+
+위 두 가지 관점으로 각 거리 측정법을 통해 abnormal score 를 계산해 보았을 때, max distance 는 Case A와 B 모두 <font style="color:red"> 세모 △</font> 에 대해서 두 관점과 다르게 나왔고, average distance 는 Case A 에 대해서는 맞게 판단했지만 Case B 에 대해서는 다르게 나왔다. 또한 두 관점으로 보았을 때 mean distance 역시 Case A, B 모두에 대해서 잘못 판단하고 있다.  
+
+- 추가적인 보정 방안이 필요!
+#### Consider additional factor
+
+Convex hull 이라는 polygon 을 만들어서 그 polygon 까지의 거리를 계산하여 추가적인 보정을 가함 : 
+$$
+\begin{aligned}
+\min_\mathbf{w}&\left(d_{c-hull}^k(\mathbf{x})\right)^2 = \left|\left|\mathbf{x}_{new}-\sum_{j=1}^k\mathbf{w}_iz_j(\mathbf{x})\right|\right|^2\\
+s.t.&\sum_{i=1}^k\mathbf{w}_i=1,\quad \mathbf{w}_i\ge 0,\;\forall i.
+\end{aligned}
+$$
+- LLE 에서 차용한 아이디어 : 
+	- 개별적인 객체($\mathbf{x}_{new}$)가 주어져 있고, 각 객체의 이웃($z_j(\mathbf{x})$)들이 주어져 있을 때, 각 객체를 이웃들로 재구성 (reconstruct) 하는 $\mathbf{w}$ 를 찾는 것
+- 아래 그림을 보면 이웃들로 구성한 polygon 안에 있으면 convex hull 까지의 distance는 0이 된다. 반면에 polygon 바깥에 있다면 가장 가까운 선분에 수선의 발을 내렸을 때 그 길이 또는 가장 가까운 꼭짓점까지의 거리가 convex hall distance다. 
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118165758.png)
+
+따라서 average distance $d_{avg}^k$ 에 이 개념을 적용해 보정해주자 하는 것이 목적이다. 
+
+#### Combine the average distance and convex distance
+
+- [ㅌ] Average distance to the k-nearest neighbors $$d_{avg}^k=\frac{1}{k}\sum_{j=1}^k||\mathbf{x}-z_j(\mathbf{x})||$$
+- [ㅌ] Convex distance to its k-nearest neighbors $$d_{c-hull}^k=\left|\left|\mathbf{x}-\sum_{j=1}^k\mathbf{w}_iz_j(\mathbf{x})\right|\right|$$
+- [ㅌ] Put the penalty term using the convex distance for those instaces located outside the convex hull of its k-nearest neighbors 
+$$d_{hybrid}^k=d_{avg}^k\times\left(\frac{2}{1+\exp(-d_{c-hull}^k)}\right)$$
+- 이러한 hybrid distance 는 average distance 를 기본으로 하여, 만일 convex hull 까지의 거리가 0 (즉 이웃들의 polygon 안에 있으면)이면 average distance 를 그대로 사용한다. 그렇지 않고 polygon 바깥에 있어서 convex hull distance 가 0보다 크다면 average distance 를 증폭시키는 penalty term 의 효과를 갖는다. 
+
+
+|             |                         |  $d_{max}^k$                                 |  $d_{avg}^k$                                 |  $d_{mean}^k$                                 | $d_{hybrid}^k$ |
+|:------------|:------------------------|:---------------------------------------------|:---------------------------------------------|:----------------------------------------------|:---------------|
+|  A $(k=4)$  |  Circle&nbsp;○          |                                        1.58  |         <font style="color:red">1.14</font>  |                                         0.50  |           <font style="color:red">1.42</font> |
+|             |  Triangle&nbsp;△&nbsp;  |         <font style="color:red">1.64</font>  |                                        1.07  |          <font style="color:red">0.94</font>  |           1.18 |
+|  B $(k=5)$  |  Circle&nbsp;○          |                                        1.56  |                                        1.08  |                                         0.80  |           <font style="color:red">1.18</font> |
+|             |  Triangle&nbsp;△&nbsp;  |         <font style="color:red">1.86</font>  |         <font style="color:red">1.09</font>  |          <font style="color:red">0.88</font>  |           1.09 |  
+
+- Hybrid distance 를 이용하면 앞서 세운 두 가지 관점에 따라 <font style="color:red">Circle</font> 이 더 큰 abnormal scores 를 갖게된다. 
+
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118171711.png)
+
+위 그림은 임의로 만든 하나의 데이터셋에 대해 각 거리 측정 방법들로 abnormal scores 을 계산한 다음 동일한 percentile로 boundary 를 만든 것이다. (d) average distance를 보면, 왼쪽 중간에 밀도가 낮아서 작은 구멍이 생기는 문제가 생긴다. (e) mean distance 는 각 밀도가 높은 것들 중앙 부분을 정상이라고 잘못 판단하고 있다. 그에 반해서 (f) hybrid distance 는 average distance 가 갖는 (밀도가 낮은 영역에 구멍이 뚤리는) 단점과, mean distance 가 가지는 (밀도가 높은 영역들 중간 영역을 정상 영역으로 판단하는) 단점들을 보완하고 있다. 
+
+#### Experiment : 강필설 교수님
+
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118172322.png)
+
+- [ㅌ] Datasets : $TrN_n$ - training set에서 normal data의 수, $TsN_n$ - test set에서 normal data의 수, $TsN_o$ - test set에서 outlier의 수
+	- 총 21 가지 데이터에 대해서 30회 반복 실험을 진행
+
+- [ㅌ] Performance in terms of the Integrated Error (IE) : 
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118172547.png)
+
+여기까지가 KNN 기반의 이상치 탐지 방법이다. 
+
+## 🎯Clustering-based Approach
+
+- 군집화 알고리즘 중에 자체적으로 이상 탐지가 가능한 것이 있는데, 바로 DBSCAN 이다. 
+	- 군집에 할당되지 않는 객체들을 모두 outlier로 간주
+- 군집화 기반 이상 탐지 기법의 기본 아이디어는 군집화를 하고 나서 각 군집으로부터의 거리가 굉장히 먼 객체는 이상치라고 판별하겠다는 것이다. 
+
+#### K-Means clustering (KMC) - based anomaly detection
+
+- [ㅌ] 객체에 대한 anomaly score 는 가장 가까운 centroid 에 대한 거리 정보로 계산됨
+- [ㅌ] 정상 데이터에 대해서 어떠한 사전적인 확률분포 가정을 하지 않음
+
+$$
+\begin{aligned}
+&\mathcal{X} = C_1\cup C_2\cup \cdots \cup C_K,\quad C_i\cap C_j = \phi,\quad i\ne j.\\
+&\arg\min_\mathbf{C}\sum_{i=1}^K\sum_{\mathbf{x}_j\in C_i}||\mathbf{x}_j-\mathbf{c}_i||^2
+\end{aligned}
+$$
+
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118173957.png)
+
+- [ㅌ] EM algorithm for KMC : 
+	1) Select $K$ points as the initial centroids
+	2) **repeat** : 
+		3) Form $K$ clusters by assigning all points to the closest centroid
+		4) Recompute the centroid of each cluster
+	5) **until** The centroids don't change
+
+#### Clustering-based approach
+
+KMC 으로 군집화를 진행하고 나서 새로운 객체에 대해서 abnormal scores 를 계산하는데 있어서 2가지 방식이 있다. 가장 가까운 중심 (nearest centroid)까지의 1) 절대 거리(absolute distance)와 2) 상대 거리 (relative distance) 방식이다. 
+
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118175218.png)
+
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118174815.png)
+
+KMC 를 통해서 위 그림과 같이 두 개의 군집이 생겼다고 할 때, A와 B라는 포인트에서 가장 가까운 centroid 까지의 (절대)거리가 같으므로 absolute distance 관점에서 A, B 의 abnormal score 는 같아진다. 각 군집의 centroid 가 군집 boundary 까지의 거리를 고려한 relative distance 관점에서 A와 B의 abnormal scores 를 구해보자. 우선 A 의 anomaly score는 $\frac{a_2}{a_1}$ (군집 지름 대비 얼마나 떨어져 있는지) 이고, B 의 anomaly score 는 $\frac{b_1}{b_2}$ 가 되므로 B 가 더 높은 score를 갖는다. 
+
+#### KMC-based anomaly score : Example
+
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118175301.png)
+위 그림은 scikit-learn 에서 제공하는 예시 그림인데, 군집에서 멀리 떨어져 있는 객체일수록 anomaly score 를 나타내는 원의 반지름 크기가 커지는 것을 알 수 있다. 
+
+
+## 🎯Principal Component Analysis - based Anomaly Detection
+
+#### PCA
+- [ㅌ] Purpose : maximize the variance after projection 
+$$
+\begin{aligned}
+\max_\mathbf{w} \;&\mathbf{w}^T\mathbf{S}\mathbf{w}\\
+s.t. \;&\mathbf{w}^T\mathbf{w}=1
+\end{aligned}
+$$
+- [ㅌ] Solution : 
+$$
+\begin{aligned}
+L &= \mathbf{w}^T\mathbf{S}\mathbf{w} - \lambda(\mathbf{w}^T\mathbf{w} - 1)\\
+\frac{\partial L}{\partial\mathbf{w}} &= 0 \Rightarrow \mathbf{S}\mathbf{w}-\lambda\mathbf{w}=0 \Rightarrow (\mathbf{S}-\lambda\mathbf{I})\mathbf{w}=0
+\end{aligned}
+$$
+
+#### PCA as an anomaly detector
+
+- [ㅌ] Anomaly score : the amount of reconstruction loss from the projected space into the original space
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118180217.png)
+
+- 가정 : 정상 데이터라면 projection 전과 recontruction 후가 비슷한 것이고, 이상 데이터라면 데이터가 애초에 듬성듬성 존재했기 때문에 projection 을 통해 그것의 패턴이 파악되지 않아서 reconstruction 후 정상 데이터에 비해 오차가 크게 나타날 것이다.
+
+- [ㅌ] Compute the reconstruction loss : 
+$$
+\begin{aligned}
+\text{error}(\mathbf{x}) &= ||\mathbf{x}-\mathbf{w}\mathbf{w}^T\mathbf{x}||^2 = (\mathbf{x}-\mathbf{w}\mathbf{w}^T\mathbf{x})^T(\mathbf{x}-\mathbf{w}\mathbf{w}^T\mathbf{x})\\
+&= \mathbf{x}^T\mathbf{x} - \mathbf{x}^T\mathbf{w}\mathbf{w}^T\mathbf{x}-\mathbf{x}^T\mathbf{w}\mathbf{w}^T\mathbf{x} + \mathbf{x}^T\mathbf{w}\mathbf{w}^T\mathbf{w}\mathbf{w}^T\mathbf{x}\\
+&= \mathbf{x}^T\mathbf{x}-\mathbf{x}^T\mathbf{w}\mathbf{w}^T\mathbf{x} = ||\mathbf{x}||^2-||\mathbf{w}^T\mathbf{x}||^2
+\end{aligned}
+$$
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118180839.png)
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118181049.png)
+
+- [ㅌ] Graphical interpretation 
+![](assets/Distance-based%20Methods/Pasted%20image%2020240118181309.png)
+
+왼쪽 그림에서, 1번 데이터에 대한 reconstruction error 는 2번 데이터의 것보다 크다. 그래서 anomaly score로 보자면 1번이 2번보다 이상치일 가능성이 더 높다.  
+
+오른쪽 그림은 반달 모양의 데이터를 통해 1st 주성분을 찾으면 빨간색 선이 될 것이고, 이를 기준으로 똑같은 거리만큼 평행하게 확장하여 threshold 를 만든다면 터널 형태의 boundary 가 만들어지게 된다. 

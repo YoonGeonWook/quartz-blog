@@ -1,0 +1,132 @@
+---
+sticker: emoji//1f4d5
+tags:
+  - Anomaly_Detection
+  - 이상탐지
+  - density-based
+  - Parzen_Window
+banner: Anomaly Detection/image/parzen.png
+---
+# 🎲Parzen Window Density Estimation 
+
+## 🎯Kernel-density Estimation
+
+지난 시간에 배웠던 **Gaussian density estimation**과 **MoG**는 **parameteric** approach라고 표현한다. 여기서 parametric 이라 함은 (Gaussian 분포처럼) **모수를 갖는 분포를 가정해서 주어진 데이터를 그 분포로 끼워 맞추는 것**을 말한다. 
+
+이번에 배울 **Kernel-density** estimation에서는, 이렇게 주어진 데이터가 특정 분포로부터 생성되었다는 가정을 하지 않고, **데이터 자체로부터 개별적인 객체들이 발생할 확률을 추정**하는 것이다. 그러한 의미에서 **non-parametric density** estimation이다. 
+- [ㅌ] Attempts to estimate the density directly from the data <font style="color:skyblue">without assuming a particular form</font> for the underlying distribution
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240115204859.png)
+
+왼쪽에 표시된 각 객체들, 숫자에 대해서 이걸 바탕으로 순수하게 개별적인 데이터로부터 (어떠한 데이터든 상관없이) 단일 데이터 포인트 하나가 들어왔을 때 그 포인트가 발생할 확률을 오른쪽 그림과 같이 추정하고자 하는 것이 Kernel-density estimation이다. 그 중에서도 대표적인 Parzen window density estimation을 배울 것이다. 
+
+#### 1-D example : 
+
+실질적인 작동방식을 다루기 위해 1차원 데이터 예시를 다뤄보자. 
+
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240115205535.png)
+
+위 그림에서 회색 영역이 데이터의 실제 정답 분포 (input distribution)이다. 이 분포로부터 샘플링한 것들을 하단에 표시된 검은색 십자가 **+** 라고 하자. 예를 들어서, 이 샘플을 이용해서 Gaussian 커널을 사용하면 파란색 곡선과 같이 밀도를 추정하게된다.
+
+#### Concept
+
+- [ㅌ] 어떠한 확률 분포 $p(x)$로부터 $x$ 가 주어진 표본 공간 $R$ 에 들어올 확률을 $P$ 라고 한다 : 
+	$$P=\int_Rp(x^\prime)dx^\prime$$
+	- 이는 확률 분포 $p(x)$의 영역 $R$에 해당하는 넓이다
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240115225400.png)
+
+- [ㅌ] 위와 같은 샘플링을 $N$ 번 추출한다고 가정하자. 그렇다면 특정한 사건의 성공 확률이 $P$인 이항 분포를 따르게 되는데, 그에 맞는 p.m.f 는 다음과 같다 : 
+$$P(k) = \begin{pmatrix}N\\k\end{pmatrix}P^k(1-P)^{N-k}$$
+- [ㅌ] 이러한 $Binom(N,P)$ 를 따르는 확률 변수 $k$ 를 가정했을 때, 전체 $N$ 번 중 성공 비율을 나타내는 $k/N$의 기대값과 분산은 다음과 같다 :  
+$$E\left[\frac{k}{N}\right] = P,\qquad Var\left[\frac{k}{N}\right]=\frac{P(1-P)}{N}$$
+- $k\sim Binom(N,P)$ 에 대해서 $E[k]=NP$, $Var[k] = NP(1-P)$이기 때문이다
+- [ㅌ] 이러한 샘플링을 충분히 많이 한다면, 즉 $N\to\infty$ 이 되면, (분산은 0에 가까워지고) 분포가 뾰족해져서 $N$ 번 중 영역 $R$ 에 들어오는 비율은 대수의 법칙에 의해 $P$로 수렴할 수 있다 : 
+$$P\cong \frac{k}{N}$$
+- [ㅌ] 또한 영역 $R$ 이 매우 작아서 분포 $p(x)$ 가 해당 영역 안에서 급격하게 변하지 않는다는 가정을 할 수 있다면, 확률 $P$ 는 아래와 같아진다 : 
+![](assets/Parzen%20Window%20Density%20Estimation/KDE_1.png)
+$$P=\int_Rp(x^\prime)dx^\prime \cong p(X=x) V$$
+- 여기서 $V$는 영역 $R$ 에서의 volume : 위 그림에서 $(x_2-x_1)$ 의 역할
+	- 1차원에서 volume은 직선, 2차원에서는 넓이, 3차원에서는 부피에 해당
+- [ㅌ] 이전 두 작업을 합하면 아래와 같은 결과가 나타난다 : 
+$$P=\int_Rp(x^\prime)dx^\prime \cong p(x) V=\frac{k}{N},\qquad p(x)=\frac{k}{NV}$$
+
+![](assets/Parzen%20Window%20Density%20Estimation/KDE_1.png)
+
+위와 같이 $N=10$ 개의 점이 있는 공간에서 빨간색 박스로 되어 있는 3가지 영역이 있다고 하자. 길이가 3인 첫 번째 영역에 대해서는 $\frac{5}{10\times3^2}$의 확률을, 길이가 2인 두 번째 영역은 $\frac{3}{10\times2^2}$, 길이가 1인 영역은 $\frac{0}{10\times1^2}$의 확률을 갖는다고 할 수 있다. 즉, 확률 밀도를 확률 분포를 가정하지 않고 주어진 데이터와 보고자 하는 영역을 통해 분포를 근사하는 것이 kernel-density estimation의 핵심이다. 
+
+$$
+p(x)=\frac{k}{N V}, \quad \text { where }\left\{\begin{array}{c}
+V: \text { volume surrounding } x \\
+N: \text { the total number of examples } \\
+k: \text { the number of examples inside } V
+\end{array}\right\}
+$$
+$N$ 값이 커질수록, $V$ 가 작아질수록 kernel-density estimation의 정확도를 올라간다. 데이터가 주어진 상태에서 $N$은 알고 있는 것이 되므로, $V$에 대해서 적절한 값을 찾고자 해야 하는데 이 때 두 가지 조건을 만족해야 한다 : 
+1) 영역 $R$ 내부에 충분히 많은 데이터가 포함되어 있어야 함
+2) 영역 $R$ 내부에서 확률 분포 $p(x)$는 일정하다 (constant)라는 가정을 만족시킬 정도로는 작아야 함
+
+- [ㅌ] $V$를 고정시키고 $k$ 를 찾아서 확률 밀도 계산하는 것 - Kernel-density estimation
+	- 여기서 배울 내용!
+- [ㅌ] $k$ 를 고정시키고 그 $k$ 개가 포함되는 영역인 $V$ 를 찾는 것 - KNN-density estimation
+
+## 🎯Parzen Window Density Estimation 
+
+Parzen Window Density estimation을 설명하기 위해 몇 가지 "장치"를 살펴보자.
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240117153539.png)
+- [ㅌ] 확률 $p(x)$를 추정하기 위해서 $x$ 를 무게 중심으로 가지면서 각 변의 길이가 $h$ 인 hypercube를 상상해보자. 
+	- 밀도를 추정하고자 하는 데이터 포인트 $x$ 가 정확히 무게중심인 상황
+	- 이러한 공간이 $d$ 차원이라고 가정하면 해당 hypercube의 volume 은 $V=h^d$ 이다.
+- [ㅌ] 그런 다음 아래와 같은 kernel function $K(u)$ 를 정의해보자 : $$K(u)=\begin{cases}1,\qquad |u_j|<\frac{1}{2},\forall j=1,\ldots,d\\0,\qquad o.w\end{cases}$$
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240117161158.png)
+- [ㅌ] 이 때 관심 영역 $R$ 에 존재하는 데이터의 개수 $k$ 는 아래와 같이 구할 수 있다 : $$k=\sum_{i=1}^NK\left(\frac{\mathbf{x}^i-\mathbf{x}}{h}\right)$$
+![](assets/Parzen%20Window%20Density%20Estimation/parzen_1.png)
+$k$ 에 대한 수식을 좀 더 파헤쳐보자. 위 그림에 빨간 상자는 $x$ 를 무게중심으로 하는 2차원의 hypercube이다. 이 때 수식 $k$ 의 의미는 저 빨간색 상자 hypercube 안에 다른 데이터 포인트가 몇 개 존재하는지를 나타내는 것이다. 위 그림의 경우 $k=4$ 가 된다. 
+
+- [ㅌ] 또한 데이터 포인트 $x$ 에대한 밀도 $p(x)$ 는 아래와 같이 구할 수 있다 : $$p(x) = \frac{1}{Nh^d}\sum_{i=1}^N K\left(\frac{\mathbf{x}_i-\mathbf{x}}{h}\right)=\frac{1}{Nh^d} k$$
+다시 위 그림에서 빨간색 상자의 무게중심인 $x$ 의 밀도는 $p(x) = \frac{1}{10\times h^2}\times 4$ 가 된다.
+
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240117155759.png)
+
+위와 같이 또 다른 무게중심 $x$ 를 선정하여 영역을 옮겨가면서 원하는 모든 관심 영역에 대해서 pdf 를 계산할 수 있고, 이것이 바로 Parzen Window density estimation 의 개념이다. 여기서 중요한 것 실제 데이터가 특정한 분포를 따른다는 가정을 전혀 하지 않았다는 점이다. 
+
+#### $K(u)$의 단점
+
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240117161330.png)
+- 불연속성 (discontinuity)을 갖는 밀도 추정치를 생산한다
+	- 길이가 $h$ 인 hypercube를 벗어나면 $k$ 개 포함시키지 않고, 무게중심 $x$와의 상대적인 거리를 반영하지 않는다.
+	- kernel이 $\pm\frac{1}{2}$을 기준으로 딱 잘라버린다는 의미
+	- 위 그림의 주황색 데이터처럼 두 데이터는 관심 영역의 무게중심과의 거리가 크게 차이 나지 않음에도 불구하고, $k$ 의 counting에 포함되는지 여부가 다른데, 이렇게 경계 기준 $1/2$ 로 인한 것을 discontinuity라고 부른다.
+
+
+#### Smooth kernel function
+- 위와 같은 단점들을 보완하기 위해 도입함
+- Smoothing kernel function 이 가져야할 조건은 특정한 영역에서의 적분값이 1 이어야 함 : $$P=\int_RK(x)dx=1$$
+	- 이러한 kernel의 면적이 1이 되기만 하면 어떠한 형태의 함수도 가능함
+- 가장 보통 사용하는 것이 radially symmetric and unimodal pdf - Gaussian kernel : $$p(x)\frac{1}{N}\sum_{i=1}^NK\left(\frac{\mathbf{x}_i-\mathbf{x}}{h}\right)$$
+	- Gaussian kernel density estimation 이란, 개별적인 객체를 Gaussian 분포의 중심으로 보고 그 중심으로부터 얼마나 떨어져 있는지에 대한 확률값 개별적으로 전부 계산하여 추정하는 것
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240117161047.png)
+
+#### Example of smooth kernels 
+
+※ 참고 : https://en.wikipedia.org/wiki/Kernel_(statistics)
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240117161524.png)
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240117161529.png)
+
+#### Smoothing parameter : bandwidth $h$
+
+이제 핵심은 smoothing parameter 인 bandwidth $h$ 를 적절하게 설정하는 것이다. 
+- $h$ 가 클수록 원래의 density 를 over-smooth
+- $h$ 가 작을수록 원래의 density 를  spiky한 형태로 추정
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240117161921.png)
+
+- Likelihood를 최대화하는 적절한 $h$ 를 찾는 것이 Parzen Window density estimation의 필요한 학습절차가 된다 - EM algorithm 으로 최적화할 수 있음음
+
+여태까지 배웠던 밀도 기반 이상 탐지 알고리즘의 개념을 다시 살펴보자.
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240117162242.png)
+
+말발굽과 같이 생긴 데이터의 영역에 대해서 Gaussian density estimation은 타원 모양의 boundary (예: 95% threshold 설정)를 뱉을 것이다. 
+
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240117162415.png)
+반면에, 3개의 가우시안 분포를 사용하여 MoG로 진행할 경우 조금 더 유연한 정상 영역에 대한 boundary를 구할 수 있을 것이다. 
+![](assets/Parzen%20Window%20Density%20Estimation/Pasted%20image%2020240117162532.png)
+Parzen window 방법을 사용하면 데이터 포인트 각각이 모두 Gaussian modal의 중심이 되기 때문에 동일한 확률밀도를 갖는 점들에 대한 contour를 그려보면 위와 같은 그림을 나타낼 것이다. 
+
