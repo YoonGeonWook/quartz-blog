@@ -1,6 +1,7 @@
 import { htmlToJsx } from "../../util/jsx"
 import { QuartzComponentConstructor, QuartzComponentProps } from "../types"
 
+
 function Content({ fileData, tree }: QuartzComponentProps) {
   const content = htmlToJsx(fileData.filePath!, tree)
   const classes: string[] = fileData.frontmatter?.cssclasses ?? []
