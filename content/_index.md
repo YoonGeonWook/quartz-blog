@@ -20,6 +20,7 @@ Welcome!
 	- [[6. Isolation Forest and Its Variations|Isolation Forest]]
 	- [[7. RRCF|Robust Random Cut Forest]]
 - **<font style="color:skyblue">XAI</font>** : [Interpretable Machine Learning(Christoph Molnar)](https://christophm.github.io/interpretable-ml-book/)
+	- [[CH03. Interpretability|Interpretability]]
 	- [[CH04. Datasets|Datasets]]
 	- [[CH05. Interpretable Methods|Interpretable Methods - Model Specific Methods]]
 	- [[CH06. Model-Agnostic Methods|Model-Agnostic Methods]]
