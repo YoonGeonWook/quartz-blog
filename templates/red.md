@@ -1,0 +1,1 @@
+<font style="color:red"><%tp.file.cursor(0)%></font>
