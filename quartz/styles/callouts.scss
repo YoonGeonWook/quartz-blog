@@ -113,6 +113,8 @@
     --callout-icon: var(--callout-icon-quote);
   }
 
+
+
   &.is-collapsed > .callout-title > .fold-callout-icon {
     transform: rotateZ(-90deg);
   }

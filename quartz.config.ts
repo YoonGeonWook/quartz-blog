@@ -17,9 +17,9 @@ const config: QuartzConfig = {
     theme: {
       cdnCaching: true,
       typography: {
-        header: "DM Serif Text",
+        header: "Noto Serif CJK KR Medium",
         body: "Bricolage Grotesque",
-        code: "JetBrains Mono",
+        code: "Fira Code",
       },
       colors: {
         lightMode: {

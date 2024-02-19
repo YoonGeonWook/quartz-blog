@@ -11,6 +11,8 @@ Welcome!
 </br>
 
 
+- **<font style="color:skyblue">실습 프로젝트</font>**
+	- [[e-commerce data analysis|E-commerce 데이터 분석]]
 - **<font style="color:skyblue">Anomaly Detection</font>** 
 	- [[0. Overview|Overview]]
 	- [[1. (Mixture of) Gaussian Density Estimation|Gaussian Density Estimation]]
