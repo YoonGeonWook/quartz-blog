@@ -540,3 +540,24 @@ df_all_sample %>% dim()
 >   gt_plt_bar_stack(column = target_ratio, labels = c("target_ratio", "target_ratio_pop"), palette = c("skyblue", "hotpink"))
 > ```
 
+![[Pasted image 20240219200917.png]]
+
+```r
+#### 표본 전체 target ratio: 38.1%
+#### 모집단 target ratio: 37.5%
+df_all_sample$target %>% mean()
+```
+```
+[1] 0.3813209
+```
+```r
+df_all$target %>% mean()
+```
+```
+[1] 0.3752151
+```
+
+이렇게 구성한 `df_all_sample` 표본 데이터를 가지고 분석에 사용할 Data Mart를 만들어보자.
+
+## 03. Data Mart & Feature Engineering
+

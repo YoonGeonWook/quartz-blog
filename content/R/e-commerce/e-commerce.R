@@ -147,10 +147,11 @@ df_tmp2 <- df_tmp %>%
   pivot_longer(cols=c(target_ratio, target_ratio_pop), names_to = 'name') %>% 
   group_by(bsym) %>% 
   reframe(target_ratio = list(value))
-tt <- df_tmp %>% left_join(df_tmp2, by='bsym') %>% 
+df_tmp %>% left_join(df_tmp2, by='bsym') %>% 
   gt() %>% 
   gt_theme_nytimes() %>% 
   tab_header(title = "bsym별 target 비율") %>% 
   gt_plt_bar_stack(column = target_ratio, labels = c("target_ratio", "target_ratio_pop"), palette = c("skyblue", "hotpink"))
-tt %>% str()
 
+df_all_sample$target %>% mean()
+df_all$target %>% mean()
