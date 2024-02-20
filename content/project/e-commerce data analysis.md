@@ -540,7 +540,7 @@ df_all_sample %>% dim()
 >   gt_plt_bar_stack(column = target_ratio, labels = c("target_ratio", "target_ratio_pop"), palette = c("skyblue", "hotpink"))
 > ```
 
-![[Pasted image 20240219200917.png]]
+![[Pasted image 20240219200917.png|center]]
 
 ```r
 #### 표본 전체 target ratio: 38.1%
@@ -560,4 +560,351 @@ df_all$target %>% mean()
 이렇게 구성한 `df_all_sample` 표본 데이터를 가지고 분석에 사용할 Data Mart를 만들어보자.
 
 ## 03. Data Mart & Feature Engineering
+
+### 03-01. Data Mart 기획 및 설계
+
+![[data-mart.png|center]]
+
+```
+> df_all %>% dim()
+[1] 24983     3
+> df_origin %>% dim()
+[1] 779494      9
+> df_all_sample %>% dim()
+[1] 7495    3
+```
+
+고객 24,983명(`df_all`)의 거래 이력이 총 779,494건(`df_origin`)이고, 이 고객 데이터셋을 층화추출법을 통해 undersampling하여 추출한 분석 대상이 7,495명(`df_all_sample`)의 고객 데이터이었다. 이를 이용해 고객별 구매 이력에 대한 Data Mart를 구성하고자 한다. 
+
+여러가지 가설을 세워 재구매 여부 `target`에 영향을 미치는 여러 가지 변수(features)를 만들어보자. 아래는 Data Mart를 구성하는 여러 변수들에 대한 설명과 로직이 작성되어 있는 Data Mart 기획서이다. 
+
+![[data-mart-desc.png|center]]
+
+### 03-02. Data 추출 및 Mart 개발
+
+앞서 기본전인 전처리가 끝난 후의 원본 데이터를 `df_orgin`으로 저장해두었다. 샘플링한 표본 데이터 `df_all_sample`을 이용해 Data Mart를 구성하기 위해선 우선 `df_origin`과 `df_all_sample`의 (`bsym`, `CustomerID`)를 key로 하여 병합해야 한다. 
+
+> [!example]- Key 변수 생성 및 데이터 병합 코드
+> ```r
+> df_origin %>% head()
+> ```
+> ```
+> # A tibble: 6 × 9
+>   InvoiceNo StockCode Description                           Quantity InvoiceDate         UnitPrice CustomerID Country        bsym   
+>   [chr]     [chr]     [chr]                                    [int] [dttm]                  [dbl] [chr]      [chr]          [chr]  
+> 1 489434    85048     "15CM CHRISTMAS GLASS BALL 20 LIGHTS"       12 2009-12-01 07:45:00      6.95 13085      United Kingdom 2009-12
+> 2 489434    79323P    "PINK CHERRY LIGHTS"                        12 2009-12-01 07:45:00      6.75 13085      United Kingdom 2009-12
+> 3 489434    79323W    "WHITE CHERRY LIGHTS"                       12 2009-12-01 07:45:00      6.75 13085      United Kingdom 2009-12
+> 4 489434    22041     "RECORD FRAME 7\" SINGLE SIZE"              48 2009-12-01 07:45:00      2.1  13085      United Kingdom 2009-12
+> 5 489434    21232     "STRAWBERRY CERAMIC TRINKET BOX"            24 2009-12-01 07:45:00      1.25 13085      United Kingdom 2009-12
+> 6 489434    22064     "PINK DOUGHNUT TRINKET POT"                 24 2009-12-01 07:45:00      1.65 13085      United Kingdom 2009-12
+> ```
+> ```r
+> df_all_sample %>% head()
+> ```
+> ```
+> # A tibble: 6 × 3
+>   bsym    CustomerID target
+>   [chr]   [chr]       [dbl]
+> 1 2009-12 12682           1
+> 2 2009-12 15413           1
+> 3 2009-12 16321           0
+> 4 2009-12 15712           1
+> 5 2009-12 17700           1
+> 6 2009-12 14911           1
+> ```
+> 
+> ```r
+> #### df_origin에 key 변수 생성
+> df_origin <- df_origin %>% 
+>   mutate(key = str_c(bsym, CustomerID))
+> df_origin %>% 
+>   reframe(n_key = n_distinct(key))
+> ```
+> ```
+> # A tibble: 1 × 1
+>   n_key
+>   [int]
+> 1 25598
+> ```
+> 
+> ```r
+> #### df_all_sample에 key 변수 생성
+> df_all_sample <- df_all_sample %>% 
+>   mutate(key = str_c(bsym, CustomerID))
+> df_all_sample %>% 
+>   reframe(n_key = n_distinct(key))
+> ```
+> ```
+> # A tibble: 1 × 1
+>   n_key
+>   [int]
+> 1  7495
+> ```
+> 
+> - 이제 `df_origin`의 `key`(`bsym` & `CustomerID`)를 이용해서 `df_all_sample`에 존재하는 행들만 가져와 `df_origin_sample`이라는 데이터로 저장:
+> ```r
+> df_origin_sample <- df_origin %>% 
+>   filter(key %in% df_all_sample$key)
+> 
+> # df_origin과 df_origin_sample의 비율: 대략 30% 정도
+> nrow(df_origin_sample)/nrow(df_origin)
+> ```
+> ```
+> [1] 0.2947758
+> ```
+
+#### Mart 구성
+
+> [!example]- Mart 구성 코드 
+> 1. **구매금액**: 월별 구매금액에 따라 다음 달 재구매 확률이 다를 수 있음
+> 	- Mart 기획서의 첫 번째 변수인 **구매금액** 관련 3개 변수를 만들기 위해 `StockCode`당 구매금액을 나타내는 `amt`를 `UnitPrice * Quantity`로 정의했다.
+> ```r
+> ### 1. 구매금액 amt 관련 변수 total_amt, max_amt, min_amt
+> #### 1) total_amt: 당월 총 구매금액
+> df_mart <- df_origin_sample %>%
+>   mutate(amt = UnitPrice * Quantity) %>% 
+>   group_by(bsym, CustomerID) %>% 
+>   reframe(total_amt = sum(amt, na.rm = T))
+> 
+> #### 2) max_amt, min_amt: 당월 송장당 최대/최소 구매금액
+> df_mart <- df_mart %>% left_join(
+>   df_origin_sample %>% 
+>     mutate(amt = UnitPrice * Quantity) %>% 
+>     group_by(bsym, CustomerID, InvoiceNo) %>% 
+>     reframe(amt = sum(amt, na.rm = T)) %>% 
+>     group_by(bsym, CustomerID) %>% 
+>     reframe(max_amt = max(amt, na.rm = T),
+>             min_amt = min(amt, na.rm = T)),
+>   by = c("bsym", "CustomerID")
+> )
+> 
+> df_mart %>% head()
+> ```
+> ```
+> # A tibble: 6 × 5
+>   bsym    CustomerID total_amt max_amt min_amt
+>   [chr]   [chr]          [dbl]   [dbl]   [dbl]
+> 1 2009-12 12437         578.28  578.28  578.28
+> 2 2009-12 12523          74.56   74.56   74.56
+> 3 2009-12 12539        5149.06 2583.23 2565.83
+> 4 2009-12 12557        1952.64 1952.64 1952.64
+> 5 2009-12 12664         549.08  549.08  549.08
+> 6 2009-12 12681        1014.54 1014.54 1014.54
+> ```
+> 
+> 2. **구매건수**: 월별 구매건수에 따라 다음 달 재구매 확률이 다를 수 있음
+> 	- 이제 구매건수(`cnt`)와 관련된 3가지 변수를 정의하자. 월별 총 구매건수는 `total_cnt`로, 월별 송장(`InvoiceNo`)별 구매 품목 수의 최대/최소는 `max_cnt`, `min_cnt`로 정의했다.
+> ```r
+> ### 2. 구매건수 cnt 관련 변수
+> #### 1) total_cnt: 당월 총 구매건수
+> df_mart <- df_mart %>% left_join(
+>   df_origin_sample %>% 
+>     group_by(bsym, CustomerID) %>% 
+>     reframe(total_cnt = n_distinct(InvoiceNo)),
+>   by = c("bsym", "CustomerID")
+> )
+> #### 2) max_cnt, min_cnt: InvoiceNo별 최대/최소 구매 품목 수
+> df_mart <- df_mart %>% 
+>   left_join(
+>     df_origin_sample %>% 
+>       group_by(bsym, CustomerID, InvoiceNo) %>% 
+>       reframe(cnt = n_distinct(StockCode)) %>% 
+>       group_by(bsym, CustomerID) %>% 
+>       reframe(max_cnt = max(cnt, na.rm = T),
+>               min_cnt = min(cnt, na.rm = T)),
+>     by = c("bsym", "CustomerID")
+>   )
+> 
+> 
+> df_mart %>% head()
+> ```
+> ```
+> # A tibble: 6 × 8
+>   bsym    CustomerID total_amt max_amt min_amt total_cnt max_cnt min_cnt
+>   [chr]   [chr]          [dbl]   [dbl]   [dbl]     [int]   [int]   [int]
+> 1 2009-12 12437         578.28  578.28  578.28         1      27      27
+> 2 2009-12 12523          74.56   74.56   74.56         1       4       4
+> 3 2009-12 12539        5149.06 2583.23 2565.83         2     104     103
+> 4 2009-12 12557        1952.64 1952.64 1952.64         1       3       3
+> 5 2009-12 12664         549.08  549.08  549.08         1       4       4
+> 6 2009-12 12681        1014.54 1014.54 1014.54         1      46      46
+> ```
+> 
+> 3. **구매수량**: 월별 구매수량에 따라 다음 달 재구매 확률이 다를 수 있음
+> ```r
+> ### 3. 구매수량 qty 관련 변수
+> #### 1) total_qty: 당월 총 구매수량
+> #### 2) min/max_qty: 당월 최소/최대 구매수량
+> df_mart <- df_mart %>% left_join(
+>   df_origin_sample %>% 
+>     group_by(bsym, CustomerID) %>% 
+>     reframe(total_qty = sum(Quantity, na.rm = T),
+>             max_qty = max(Quantity, na.rm = T),
+>             min_qty = min(Quantity, na.rm = T)),
+>   by = c("bsym", "CustomerID")
+> )
+> 
+> df_mart %>% head()
+> ```
+> ```
+> # A tibble: 6 × 11
+>   bsym    CustomerID total_amt max_amt min_amt total_cnt max_cnt min_cnt total_qty max_qty min_qty
+>   [chr]   [chr]          [dbl]   [dbl]   [dbl]     [int]   [int]   [int]     [int]   [int]   [int]
+> 1 2009-12 12437         578.28  578.28  578.28         1      27      27       263      24       3
+> 2 2009-12 12523          74.56   74.56   74.56         1       4       4        62      36       4
+> 3 2009-12 12539        5149.06 2583.23 2565.83         2     104     103      2128      48       2
+> 4 2009-12 12557        1952.64 1952.64 1952.64         1       3       3       576     216     144
+> 5 2009-12 12664         549.08  549.08  549.08         1       4       4       134      72       2
+> 6 2009-12 12681        1014.54 1014.54 1014.54         1      46      46       650      72       1
+> ```
+> 
+> 4. **국적**: 국적에 따라 재구매 확률이 다를 수 있음
+> ```r
+> df_mart <- df_mart %>% left_join(
+>   df_origin_sample %>% 
+>     group_by(bsym, CustomerID) %>% 
+>     reframe(Country = first(Country)),
+>   by = c("bsym", "CustomerID")
+> )
+> df_mart %>% head()
+> ```
+> ```
+> # A tibble: 6 × 12
+>   bsym  CustomerID total_amt max_amt min_amt total_cnt max_cnt min_cnt total_qty max_qty min_qty Country
+>   [chr] [chr]          [dbl]   [dbl]   [dbl]     [int]   [int]   [int]     [int]   [int]   [int] [chr]  
+> 1 2009… 12437         578.28  578.28  578.28         1      27      27       263      24       3 France 
+> 2 2009… 12523          74.56   74.56   74.56         1       4       4        62      36       4 France 
+> 3 2009… 12539        5149.06 2583.23 2565.83         2     104     103      2128      48       2 Spain  
+> 4 2009… 12557        1952.64 1952.64 1952.64         1       3       3       576     216     144 Spain  
+> 5 2009… 12664         549.08  549.08  549.08         1       4       4       134      72       2 Finland
+> 6 2009… 12681        1014.54 1014.54 1014.54         1      46      46       650      72       1 France
+> ```
+> 
+> 5. **구매시간대**: 구매 시간대(아침, 점심, 저녁, 밤)에 따라 재구매 확률이 다를 수 있음
+> 	- 월별 고객별 아침, 점심, 저녁, 밤에 따른 구매 빈도를 계산한 후 이 값이 가장 높은 시간대를 `peak_time`이라는 변수로 정의
+> ```r
+> ### 5. 구매 시간대(아침, 점심, 저녁, 밤)
+> #### 아침: 6~12시, 점심: 12~18시, 저녁: 18~24시, 밤: 0~6시
+> #### 시간대별 구매 빈도 계산
+> df_mart <- df_mart %>% left_join(
+>   df_origin_sample %>% 
+>     mutate(hour = hour(InvoiceDate),
+>            peak_time = case_when(
+>              hour >= 6  & hour < 12 ~ "Morning",
+>              hour >= 12 & hour < 18 ~ "Afternoon",
+>              hour >= 18 & hour < 24 ~ "Evening",
+>              TRUE ~ "Night"
+>            )) %>% 
+>     group_by(bsym, CustomerID, peak_time) %>% 
+>     reframe(purchase_cnt = n()) %>% 
+>     group_by(bsym, CustomerID) %>% 
+>     slice_max(purchase_cnt, n = 1, with_ties = FALSE) %>% 
+>     select(-purchase_cnt) %>% 
+>     ungroup(),
+>   by = c("bsym", "CustomerID")
+> )
+> df_mart %>% head()
+> ```
+> ```
+> # A tibble: 6 × 14
+>   bsym    CustomerID total_amt max_amt min_amt total_cnt max_cnt min_cnt total_qty max_qty min_qty Country peak_time
+>   [chr]   [chr]          [dbl]   [dbl]   [dbl]     [int]   [int]   [int]     [int]   [int]   [int] [chr]   [chr]       
+> 1 2009-12 12437         578.28  578.28  578.28         1      27      27       263      24       3 France  Afternoon    
+> 2 2009-12 12523          74.56   74.56   74.56         1       4       4        62      36       4 France  Afternoon    
+> 3 2009-12 12539        5149.06 2583.23 2565.83         2     104     103      2128      48       2 Spain   Afternoon    
+> 4 2009-12 12557        1952.64 1952.64 1952.64         1       3       3       576     216     144 Spain   Morning        
+> 5 2009-12 12664         549.08  549.08  549.08         1       4       4       134      72       2 Finland Morning        
+> 6 2009-12 12681        1014.54 1014.54 1014.54         1      46      46       650      72       1 France  Afternoon  
+> ```
+> 
+> 6. **계절**: 계절에 따라 재구매 확률이 다를 수 있음
+> ```r
+> ### 6. 계절 변수 추가
+> df_mart <- df_mart %>% left_join(
+>   df_origin_sample %>% 
+>     mutate(month = month(InvoiceDate),
+>            season = case_when(
+>              month %in% c(3,4,5) ~ "Spring",
+>              month %in% c(6,7,8) ~ "Summer",
+>              month %in% c(9,10,11) ~ "Autumn",
+>              TRUE ~ "Winter"
+>            )) %>% 
+>     group_by(bsym, CustomerID) %>% 
+>     reframe(season = first(season)),
+>   by = c("bsym", "CustomerID")
+> )
+> df_mart %>% head()
+> ```
+> ```
+> # A tibble: 6 × 15
+>   bsym    CustomerID total_amt max_amt min_amt total_cnt max_cnt min_cnt total_qty max_qty min_qty Country peak_time  season
+>   [chr]   [chr]          [dbl]   [dbl]   [dbl]     [int]   [int]   [int]     [int]   [int]   [int] [chr]   [chr]      [chr] 
+> 1 2009-12 12437         578.28  578.28  578.28         1      27      27       263      24       3 France  Afternoon   Winter
+> 2 2009-12 12523          74.56   74.56   74.56         1       4       4        62      36       4 France  Afternoon   Winter
+> 3 2009-12 12539        5149.06 2583.23 2565.83         2     104     103      2128      48       2 Spain   Afternoon   Winter
+> 4 2009-12 12557        1952.64 1952.64 1952.64         1       3       3       576     216     144 Spain   Morning     Winter
+> 5 2009-12 12664         549.08  549.08  549.08         1       4       4       134      72       2 Finland Morning     Winter
+> 6 2009-12 12681        1014.54 1014.54 1014.54         1      46      46       650      72       1 France  Afternoon   Winter
+> ```
+> 
+> 7. **구매 빈도**: 구매 빈도가 높은 고객은 재구매 확률이 높을 수 있음
+> ```r
+> df_mart <- df_mart %>% left_join(
+>   df_origin_sample %>% 
+>     group_by(bsym, CustomerID) %>% 
+>     reframe(cnt = n_distinct(InvoiceNo)) %>% 
+>     mutate(
+>       tmp_date = as.Date(paste0(bsym, "-01")),
+>       days = as.integer(day(floor_date(tmp_date + months(1), "month") - 1)),
+>       freq = cnt / days
+>     ) %>% 
+>     select(-c(cnt, tmp_date, days)),
+>   by = c("bsym", "CustomerID")
+> )
+> 
+> df_mart %>% head()
+> ```
+> ```
+> # A tibble: 6 × 16
+>   bsym    CustomerID total_amt max_amt min_amt total_cnt max_cnt min_cnt total_qty max_qty min_qty Country peak_time season      freq
+>   [chr]   [chr]          [dbl]   [dbl]   [dbl]     [int]   [int]   [int]     [int]   [int]   [int] [chr]   [chr]       [chr]      [dbl]
+> 1 2009-12 12437         578.28  578.28  578.28         1      27      27       263      24       3 France  Afternoon   Winter 0.0322581
+> 2 2009-12 12523          74.56   74.56   74.56         1       4       4        62      36       4 France  Afternoon   Winter 0.0322581
+> 3 2009-12 12539        5149.06 2583.23 2565.83         2     104     103      2128      48       2 Spain   Afternoon   Winter 0.0645161
+> 4 2009-12 12557        1952.64 1952.64 1952.64         1       3       3       576     216     144 Spain   Morning     Winter 0.0322581
+> 5 2009-12 12664         549.08  549.08  549.08         1       4       4       134      72       2 Finland Morning     Winter 0.0322581
+> 6 2009-12 12681        1014.54 1014.54 1014.54         1      46      46       650      72       1 France  Afternoon   Winter 0.0322581
+> ```
+> 
+> 8. **평균 구매금액**: 평균 구매 금액에 따라 재구매 확률이 다를 수 있음
+> 	- 이 변수는 `total_amt`를 `total_cnt`로 단순히 나눈 값
+> ```r
+> df_mart <- df_mart %>% 
+>   mutate(avg_amt = total_amt / total_cnt)
+> 
+> df_mart %>% head()
+> ```
+> ```
+> # A tibble: 6 × 17
+>   bsym    CustomerID total_amt max_amt min_amt total_cnt max_cnt min_cnt total_qty max_qty min_qty Country peak_time season      freq avg_amt
+>   [chr]   [chr]          [dbl]   [dbl]   [dbl]     [int]   [int]   [int]     [int]   [int]   [int] [chr]   [chr]       [chr]      [dbl]   [dbl]
+> 1 2009-12 12437         578.28  578.28  578.28         1      27      27       263      24       3 France  Afternoon   Winter 0.0322581  578.28
+> 2 2009-12 12523          74.56   74.56   74.56         1       4       4        62      36       4 France  Afternoon   Winter 0.0322581   74.56
+> 3 2009-12 12539        5149.06 2583.23 2565.83         2     104     103      2128      48       2 Spain   Afternoon   Winter 0.0645161 2574.53
+> 4 2009-12 12557        1952.64 1952.64 1952.64         1       3       3       576     216     144 Spain   Morning       Winter 0.0322581 1952.64
+> 5 2009-12 12664         549.08  549.08  549.08         1       4       4       134      72       2 Finland Morning       Winter 0.0322581  549.08
+> 6 2009-12 12681        1014.54 1014.54 1014.54         1      46      46       650      72       1 France  Afternoon    Winter 0.0322581 1014.54
+> ```
+
+이렇게 만든 Mart에 key(`bsym` & `CustomerID`)를 이용해 `target` 변수와 병합해 저장하자.
+```r
+df_mart <- df_mart %>% left_join( df_all_sample %>% select(-key), by = [c](https://rdrr.io/r/base/c.html)("bsym", "CustomerID") )
+df_mart %>% dim()
+```
+```
+[1] 7495 17
+```
+
+### 03-03. Numeric Feature Engineering
 

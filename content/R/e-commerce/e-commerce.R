@@ -155,3 +155,166 @@ df_tmp %>% left_join(df_tmp2, by='bsym') %>%
 
 df_all_sample$target %>% mean()
 df_all$target %>% mean()
+
+# 03. Data Mart & Feature Engineering
+## 03-01. Data Mart 기획 및 설계
+df_origin %>% head()
+df_all_sample %>% head()
+
+#### df_origin에 key 변수 생성
+df_origin <- df_origin %>% 
+  mutate(key = str_c(bsym, CustomerID))
+df_origin %>% 
+  reframe(n_key = n_distinct(key))
+
+#### df_all_sample에 key 변수 생성
+df_all_sample <- df_all_sample %>% 
+  mutate(key = str_c(bsym, CustomerID))
+df_all_sample %>% 
+  reframe(n_key = n_distinct(key))
+
+
+df_origin_sample <- df_origin %>% 
+  filter(key %in% df_all_sample$key)
+
+# df_origin과 df_origin_sample의 비율: 대략 30% 정도
+nrow(df_origin_sample)/nrow(df_origin)
+
+## Mart구성
+### 구매금액
+### 1. 구매금액 amt 관련 변수 total_amt, max_amt, min_amt
+#### 1) total_amt: 당월 총 구매금액
+df_mart <- df_origin_sample %>%
+  mutate(amt = UnitPrice * Quantity) %>% 
+  group_by(bsym, CustomerID) %>% 
+  reframe(total_amt = sum(amt, na.rm = T))
+
+#### 2) max_amt, min_amt: 당월 송장당 최대/최소 구매금액
+df_mart <- df_mart %>% left_join(
+  df_origin_sample %>% 
+    mutate(amt = UnitPrice * Quantity) %>% 
+    group_by(bsym, CustomerID, InvoiceNo) %>% 
+    reframe(amt = sum(amt, na.rm = T)) %>% 
+    group_by(bsym, CustomerID) %>% 
+    reframe(max_amt = max(amt, na.rm = T),
+            min_amt = min(amt, na.rm = T)),
+  by = c("bsym", "CustomerID")
+)
+
+df_mart %>% head()
+
+### 2. 구매건수 cnt 관련 변수
+#### 1) total_cnt: 당월 총 구매건수
+df_mart <- df_mart %>% left_join(
+  df_origin_sample %>% 
+    group_by(bsym, CustomerID) %>% 
+    reframe(total_cnt = n_distinct(InvoiceNo)),
+  by = c("bsym", "CustomerID")
+)
+#### 2) max_cnt, min_cnt: InvoiceNo별 최대/최소 구매 품목 수
+df_mart <- df_mart %>% 
+  left_join(
+    df_origin_sample %>% 
+      group_by(bsym, CustomerID, InvoiceNo) %>% 
+      reframe(cnt = n_distinct(StockCode)) %>% 
+      group_by(bsym, CustomerID) %>% 
+      reframe(max_cnt = max(cnt, na.rm = T),
+              min_cnt = min(cnt, na.rm = T)),
+    by = c("bsym", "CustomerID")
+  )
+
+
+df_mart %>% head()
+
+### 3. 구매수량 qty 관련 변수
+#### 1) total_qty: 당월 총 구매수량
+#### 2) min/max_qty: 당월 최소/최대 구매수량
+df_mart <- df_mart %>% left_join(
+  df_origin_sample %>% 
+    group_by(bsym, CustomerID) %>% 
+    reframe(total_qty = sum(Quantity, na.rm = T),
+            max_qty = max(Quantity, na.rm = T),
+            min_qty = min(Quantity, na.rm = T)),
+  by = c("bsym", "CustomerID")
+)
+
+df_mart %>% head()
+
+### 4. 국적 변수 생성
+df_mart <- df_mart %>% left_join(
+  df_origin_sample %>% 
+    group_by(bsym, CustomerID) %>% 
+    reframe(Country = first(Country)),
+  by = c("bsym", "CustomerID")
+)
+df_mart %>% head()
+
+### 5. 구매 시간대(아침, 점심, 저녁, 밤)
+#### 아침: 6~12시, 점심: 12~18시, 저녁: 18~24시, 밤: 0~6시
+#### 시간대별 구매 빈도 계산
+df_mart <- df_mart %>% left_join(
+  df_origin_sample %>% 
+    mutate(hour = hour(InvoiceDate),
+           peak_time = case_when(
+             hour >= 6  & hour < 12 ~ "Morning",
+             hour >= 12 & hour < 18 ~ "Afternoon",
+             hour >= 18 & hour < 24 ~ "Evening",
+             TRUE ~ "Night"
+           )) %>% 
+    group_by(bsym, CustomerID, peak_time) %>% 
+    reframe(purchase_cnt = n()) %>% 
+    group_by(bsym, CustomerID) %>% 
+    slice_max(purchase_cnt, n = 1, with_ties = FALSE) %>% 
+    select(-purchase_cnt) %>% 
+    ungroup(),
+  by = c("bsym", "CustomerID")
+)
+df_mart %>% head()
+
+### 6. 계절 변수 추가
+df_mart <- df_mart %>% left_join(
+  df_origin_sample %>% 
+    mutate(month = month(InvoiceDate),
+           season = case_when(
+             month %in% c(3,4,5) ~ "Spring",
+             month %in% c(6,7,8) ~ "Summer",
+             month %in% c(9,10,11) ~ "Autumn",
+             TRUE ~ "Winter"
+           )) %>% 
+    group_by(bsym, CustomerID) %>% 
+    reframe(season = first(season)),
+  by = c("bsym", "CustomerID")
+)
+df_mart %>% head()
+
+### 7. 당월 구매 빈도
+#### freq = count(InvoiceNo) / # num of days in month
+df_mart <- df_mart %>% left_join(
+  df_origin_sample %>% 
+    group_by(bsym, CustomerID) %>% 
+    reframe(cnt = n_distinct(InvoiceNo)) %>% 
+    mutate(
+      tmp_date = as.Date(paste0(bsym, "-01")),
+      days = as.integer(day(floor_date(tmp_date + months(1), "month") - 1)),
+      freq = cnt / days
+    ) %>% 
+    select(-c(cnt, tmp_date, days)),
+  by = c("bsym", "CustomerID")
+)
+
+df_mart %>% head()
+
+### 8. 평균 구매금액: avg_amt
+#### 송장당 평균 구매금액
+df_mart <- df_mart %>% 
+  mutate(avg_amt = total_amt / total_cnt)
+
+df_mart %>% head()
+
+df_mart <- df_mart %>% left_join(
+  df_all_sample %>% select(-key),
+  by = c("bsym", "CustomerID")
+)
+
+df_mart %>% head()
+df_mart %>% dim()
