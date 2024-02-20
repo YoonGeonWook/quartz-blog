@@ -241,7 +241,7 @@ tags:
 > ```
 
 
-이렇게 주어진 데이터에 대한 기본적인 정보 확인과 전처리를 마치고 나면 아래와 같이 기존 1,067,370개의 ㅣ행에서 779,494개의 행으로 줄어든 것을 확인할 수 있다.
+이렇게 주어진 데이터에 대한 기본적인 정보 확인과 전처리를 마치고 나면 아래와 같이 기존 1,067,370개의 행에서 779,494개의 행으로 줄어든 것을 확인할 수 있다.
 
 ```r
 ### 1,067,370 → 779,494
@@ -930,6 +930,7 @@ Tidymodels 프레임워크에서 모델링을 하려면 우선 모델링 대상�
 >   library(corrplot)
 >   library(bonsai)
 >   library(workflowsets)
+>   library(viridis)
 > })
 > tidymodels_prefer()
 > ```
@@ -979,7 +980,7 @@ df_mart <- df_mart %>%
 ```
 
 
- - 문자형 변수 3개 `factor`형으로 변환해주기
+ - 문자형 변수 3개 `factor`형으로 변환해주기 + `target`도 `factor`형 지정
  ```r
  df_mart <- df_mart %>% 
  mutate(across(c(Country, peak_time, season), factor))
@@ -988,6 +989,7 @@ df_mart <- df_mart %>%
 #### Splitting our data
 
 주어진 데이터 `df_mart`의 `target` 값을 층(`strata`)으로 지정해서 test set의 size를 30%로 하여 데이터를 분할 하자:
+- [`rsample::initial_split()`](https://rsample.tidymodels.org/reference/initial_split.html), `training()`, `testing()` 이용
 
 ```r
 set.seed(123)
@@ -1017,7 +1019,7 @@ split
 
 #### Explore the data
 
-이제 `train` 데이터를 이용해 적절한 pre-processing 방법을 찾아보자. 이때 `skimr` 패키지의 `skim()` 함수를 이용해 변수별 간략한 정보를 확인할 수 있다:
+이제 `train` 데이터를 이용해 적절한 pre-processing 방법을 찾아보자. 이때 `skimr` 패키지의 [`skim()`](https://cran.r-project.org/web/packages/skimr/vignettes/skimr.html) 함수를 이용해 변수별 간략한 정보를 확인할 수 있다:
 
 > [!example]- `skim()`을 통한 변수별 정보
 > ```
@@ -1154,6 +1156,7 @@ ID:         2
 ```
 
 - Yeo-Johnson 변환 전후의 분포 비교:
+	- [`step_YeoJohnson()`](https://recipes.tidymodels.org/reference/step_YeoJohnson.html) 이용
 
 > [!note]- code fold
 > ```r
@@ -1297,4 +1300,468 @@ basic_rec <- basic_rec %>%
 
 
 #### Dummy encoding
+
+범주형 변수는 `Country`, `peak_time`, `season` 이렇게 3개가 있었는데, 각각 2가지, 3가지, 4가지 수준을 가지고 있다. 해당 변수들에 대해 dummy encoding을 해주면 다음과 같아진다:
+
+```r
+basic_rec %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  prep(train) %>% 
+  bake(train) %>% 
+  select(starts_with("Country"), starts_with("peak_time"), starts_with("season"))
+```
+```
+# A tibble: 5,245 × 6
+   Country_UK peak_time_Evening peak_time_Morning season_Spring season_Summer season_Winter
+        <dbl>             <dbl>             <dbl>         <dbl>         <dbl>         <dbl>
+ 1          0                 0                 0             0             0             1 
+ 2          0                 0                 0             0             0             1 
+ 3          0                 0                 1             0             0             1 
+ 4          0                 0                 1             0             0             1 
+ 5          0                 0                 0             0             0             1 
+ 6          1                 0                 0             0             0             1 
+ 7          1                 0                 0             0             0             1 
+ 8          1                 0                 1             0             0             1 
+ 9          1                 0                 0             0             0             1
+10          1                 1                 0             0             0             1
+# ℹ 5,235 more rows
+# ℹ Use `print(n = ...)` to see more rows
+```
+
+- 이렇게 범주형 변수에 대해 dummy 처리를 하고 나면 일부 수준은 드물게 존재하기 때문에 near zero variance의 문제가 생길 수 있음
+- [`step_nzv()`](https://recipes.tidymodels.org/reference/step_nzv.html)를 통해 near zero variance인 변수 제거:
+	- `peak_time`의 `"Evening"` 수준에 대한 dummy가 제거됨
+```r
+#### step_nzv()를 통해 near zero variance 변수 제거
+basic_rec %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_nzv(all_predictors()) %>% 
+  prep(train)
+```
+```
+── Recipe ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+── Inputs 
+Number of variables by role
+outcome:    1
+predictor: 14
+ID:         2
+
+── Training information 
+Training data contained 5245 data points and no incomplete rows.
+
+── Operations 
+• Dummy variables from: Country, peak_time, season | Trained
+• Sparse, unbalanced variable filter removed: peak_time_Evening | Trained
+```
+
+### 04-02. 모델 성능 비교
+
+앞서 모델링을 위한 전처리는 recipe를 만듦으로써 완료했다. 물론 추가적인 전처리가 가능하지만 우선은 앞에서 정의한 방식으로 recipe를 구성하도록 하자.
+
+#### Defining resampling schemes with `rsample`
+
+![[resampling.svg|center]]
+
+
+Tidymodels에서는 [`rsample`](https://rsample.tidymodels.org/) 패키지를 통해 resample scheme을 구축한 다음 모델에 대한 성능을 측정한다. 여기서는 **<font style="color:orange">10-fold CV repeated 5 times (using stratification)</font>**로 진행한다.
+
+```r
+set.seed(123)
+train_cv <- train %>% 
+  vfold_cv(v = 10, repeats = 5, strata = target)
+train_cv
+```
+```
+#  10-fold cross-validation repeated 5 times using stratification 
+# A tibble: 50 × 3
+   splits             id      id2   
+   <list>             <chr>   <chr> 
+ 1 <split [4720/525]> Repeat1 Fold01 
+ 2 <split [4720/525]> Repeat1 Fold02 
+ 3 <split [4720/525]> Repeat1 Fold03 
+ 4 <split [4720/525]> Repeat1 Fold04 
+ 5 <split [4720/525]> Repeat1 Fold05 
+ 6 <split [4721/524]> Repeat1 Fold06 
+ 7 <split [4721/524]> Repeat1 Fold07 
+ 8 <split [4721/524]> Repeat1 Fold08 
+ 9 <split [4721/524]> Repeat1 Fold09
+10 <split [4721/524]> Repeat1 Fold10
+# ℹ 40 more rows
+# ℹ Use `print(n = ...)` to see more rows
+```
+
+- tidymodels에서는 training/testing의 splitting 후, training set을 training/validation으로 split된 것을 analysis/assessmemt set으로 부른다. 
+> [!example]- Training/Validation ⇒ Analysis/Assessment
+> ```r
+> train_cv %>% 
+>   tidy() %>% 
+>   group_by(Repeat, Fold, Data) %>% 
+>   count() %>% 
+>   print(n = 20)
+> ```
+> ```
+> # A tibble: 100 × 4
+> # Groups:   Repeat, Fold, Data [100]
+>    Repeat  Fold   Data           n
+>    [chr]   [chr]  [chr]      [int]
+>  1 Repeat1 Fold01 Analysis    4720
+>  2 Repeat1 Fold01 Assessment   525 
+>  3 Repeat1 Fold02 Analysis    4720
+>  4 Repeat1 Fold02 Assessment   525 
+>  5 Repeat1 Fold03 Analysis    4720
+>  6 Repeat1 Fold03 Assessment   525 
+>  7 Repeat1 Fold04 Analysis    4720
+>  8 Repeat1 Fold04 Assessment   525 
+>  9 Repeat1 Fold05 Analysis    4720
+> 10 Repeat1 Fold05 Assessment   525
+> 11 Repeat1 Fold06 Analysis    4721
+> 12 Repeat1 Fold06 Assessment   524
+> 13 Repeat1 Fold07 Analysis    4721
+> 14 Repeat1 Fold07 Assessment   524
+> 15 Repeat1 Fold08 Analysis    4721
+> 16 Repeat1 Fold08 Assessment   524
+> 17 Repeat1 Fold09 Analysis    4721
+> 18 Repeat1 Fold09 Assessment   524
+> 19 Repeat1 Fold10 Analysis    4721
+> 20 Repeat1 Fold10 Assessment   524
+> # ℹ 80 more rows
+> # ℹ Use `print(n = ...)` to see more rows
+> ```
+
+#### Model specifications with `parsnip`
+
+모델링 전에 필요한 전처리 기법들을 recipe를 이용해 지정하는 것처럼 이용할 **모델의 사양(model spec)**에 대해 정의할 수 있다.
+
+- model spec이란: 
+	- 모델의 유형: 선형 회귀, 랜덤 포레스트, XGBoost 등
+	- 엔진 선택: 어떤 패키지의 모델을 사용할지 결정 
+		- 랜덤포레스트는 `ranger`, `randomForest` 등의 패키지에서 사용가능
+	- 모드 결정: 회귀, 분류 결정
+	- Hyperparameter 결정
+
+- 여기서 사용할 모델: 
+	1. **<font style="color:orange">Logistic regression</font>** with [`glmnet`](https://glmnet.stanford.edu/articles/glmnet.html)
+		- `glmnet` 엔진을 사용하는 이유는 여러 수치형 변수들 간 다중공선성이 의심되기 때문에 이를 잡아줄 Ridge 효과를 위해 Elastic Net을 사용하기 위함
+		- Hyperparameter tuning 전에는 우선 Ridge 모형으로 진행
+	1. **<font style="color:orange">Random Forest</font>** with [`ranger`](https://parsnip.tidymodels.org/reference/details_rand_forest_ranger.html)
+	2. **<font style="color:orange">LightGBM</font>** with [`lightgbm`](https://parsnip.tidymodels.org/reference/details_boost_tree_lightgbm.html)
+
+- 패키지/엔진에서 제공하는 기본 값으로 hyperparameter 값들을 설정해 각 모델 사양을 지정:
+```r
+glmnet_spec <- 
+  logistic_reg(mode = 'classification',
+             engine = 'glmnet',
+             penalty = 0.00001,
+             mixture = 1)
+rf_spec <- 
+  rand_forest(mode = 'classification',
+              engine = 'ranger')
+lgbm_spec <- 
+  boost_tree(mode = 'classification',
+             engine = "lightgbm")
+```
+
+#### Putting it all together with worflows
+
+[모델별 전처리](https://www.tmwr.org/pre-proc-table)에 모델별로 권장되는 recipe/pre-processing 기법이 다르다. 따라서 Logistic regression과 tree-based models은 서로 다른 recipe를 사용하는 것이 좋아보인다.
+
+- Logistic regression을 위한 recipe와 tree-based models를 위한 recipe 두 가지를 정의
+	- `glm_rec`: [`step_normalize()`](https://recipes.tidymodels.org/reference/step_normalize.html)를 통해 수치형 변수 표준화 추가
+	- `tree_rec`: 범주형 변수 dummy 처리 + near zero variance 변수 처리
+```r
+glm_rec <- 
+  basic_rec %>% 
+  step_YeoJohnson(all_numeric_predictors()) %>%  
+  step_dummy(all_nominal_predictors()) %>% 
+  step_normalize(all_numeric_predictors()) %>% 
+  step_nzv(all_predictors())
+
+tree_rec <- 
+  basic_rec %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_nzv(all_predictors())
+```
+
+- [`workflowsets`](https://workflowsets.tidymodels.org/) 패키지의 [`workflow_set()`](https://workflowsets.tidymodels.org/reference/workflow_set.html)을 이용해서 전처리를 위한 recipe과 model spec을 연결하고, 각 모델들을 하나의 workflow 집합으로 만듦
+```r
+basic_wflows <- 
+  bind_rows(
+    workflow_set(preproc = list(dummy_trans = glm_rec),
+                 models = list(glmnet = glmnet_spec),
+                 cross = T),
+    workflow_set(preproc = list(dummy = tree_rec),
+                 models = list(RF = rf_spec,
+                               LGBM = lgbm_spec),
+                 cross = T)
+  )
+basic_wflows
+```
+```
+# A workflow set/tibble: 3 × 4
+  wflow_id           info             option    result    
+  <chr>              <list>           <list>    <list>    
+1 dummy_trans_glmnet <tibble [1 × 4]> <opts[0]> <list [0]>
+2 dummy_RF           <tibble [1 × 4]> <opts[0]> <list [0]>
+3 dummy_LGBM         <tibble [1 × 4]> <opts[0]> <list [0]>
+```
+
+이제 이 3가지 기본 모형에 대해 앞서 만든 10-fold repeated 5 times resampling scheme(`train_cv`)으로 모형을 학습해 성능을 측정해보자. 
+- 모형 학습 시 병렬 처리를 위해 8개의 클러스터 이용
+```r
+cl <- makePSOCKcluster(8)
+registerDoParallel(cl)
+getDoParWorkers()
+tic()
+set.seed(123)
+basic_models <- 
+  basic_wflows %>% 
+  workflow_map("fit_resamples",
+               resamples = train_cv,
+               verbose = T,
+               metrics = metric_set(f_meas, roc_auc))
+toc()
+stopCluster(cl)
+registerDoSEQ()
+```
+```
+i 1 of 3 resampling: dummy_trans_glmnet
+✔ 1 of 3 resampling: dummy_trans_glmnet (8.1s)
+i 2 of 3 resampling: dummy_RF
+✔ 2 of 3 resampling: dummy_RF (16.7s)
+i 3 of 3 resampling: dummy_LGBM
+✔ 3 of 3 resampling: dummy_LGBM (16.4s)
+48.85 sec elapsed
+```
+
+- 성능 비교하기:
+	- 비교 기준 - 1순위: f1-score, 2순위: AUROC
+	- 1등: `glmnet`을 이용한 (Ridge) Logistic regression
+
+```r
+basic_models %>% 
+  rank_results()
+```
+```
+# A tibble: 6 × 9
+  wflow_id           .config              .metric     mean    std_err     n preprocessor model         rank
+  <chr>              <chr>                <chr>      <dbl>      <dbl> <int> <chr>        <chr>        <int>
+1 dummy_trans_glmnet Preprocessor1_Model1 f_meas  0.777325 0.00162712    50 recipe       logistic_reg     1
+2 dummy_trans_glmnet Preprocessor1_Model1 roc_auc 0.660317 0.00358126    50 recipe       logistic_reg     1
+3 dummy_RF           Preprocessor1_Model1 f_meas  0.766456 0.00213970    50 recipe       rand_forest      2
+4 dummy_RF           Preprocessor1_Model1 roc_auc 0.647107 0.00361587    50 recipe       rand_forest      2
+5 dummy_LGBM         Preprocessor1_Model1 f_meas  0.762929 0.00179101    50 recipe       boost_tree       3
+6 dummy_LGBM         Preprocessor1_Model1 roc_auc 0.646857 0.00342101    50 recipe       boost_tree       3
+```
+
+모델의 성능을 10-fild CV repeated 5 times인 resampleing scheme에서 평가했기 때문에 (training set 만으로 평가하는 것보다) 과적합의 위험을 줄일 수 있음
+- 아래는 3가지 모형에 대한 training set과 testing set에 대한 성능을 비교한 것임
+	- 비교 성능 - 1순위: f1-score, 2순위: AUROC
+```r
+#### 각 모형을 test set에 적합
+glmnet_model <- basic_models %>% 
+  extract_workflow(c("dummy_trans_glmnet")) %>% 
+  last_fit(split, metrics = metric_set(f_meas, roc_auc))
+RF_model <- basic_models %>% 
+  extract_workflow(c("dummy_RF")) %>% 
+  last_fit(split, metrics = metric_set(f_meas, roc_auc))
+LGBM_model <- basic_models %>% 
+  extract_workflow(c("dummy_LGBM")) %>% 
+  last_fit(split, metrics = metric_set(f_meas, roc_auc))
+
+#### Compare Test vs Resamples(Training)
+train_perf <- basic_models %>% 
+  rank_results() %>% 
+  select(mean) %>% 
+  mutate(model = rep(c("glmnet", "RF", "LGBM"), each = 2),
+         metric = rep(c("f1", "roc_auc"), 3)) %>% 
+  select(model, metric, .estimate = mean)
+
+
+
+test_perf <- bind_rows(
+  glmnet_model %>% 
+    collect_metrics() %>% 
+    select(.estimate),
+  RF_model %>% 
+    collect_metrics() %>% 
+    select(.estimate),
+  LGBM_model %>% 
+    collect_metrics() %>% 
+    select(.estimate)
+) %>%
+  mutate(model = rep(c("glmnet", "RF", "LGBM"), each = 2),
+         metric = rep(c("f1", "roc_auc"), 3)) %>% 
+  select(model, metric, .estimate)
+
+
+before_tuning <- train_perf %>% 
+  pivot_wider(names_from = metric, values_from = .estimate) %>% 
+  left_join(
+    test_perf %>% 
+      pivot_wider(names_from = metric, values_from = .estimate),
+    by = "model", suffix = c("_Train", "_Test"), 
+  )
+before_tuning
+```
+```
+# A tibble: 3 × 5
+  model  f1_Train roc_auc_Train  f1_Test roc_auc_Test
+  <chr>     <dbl>         <dbl>    <dbl>        <dbl>
+1 glmnet 0.777325      0.660317 0.780729     0.658363
+2 RF     0.766456      0.647107 0.759453     0.655783
+3 LGBM   0.762929      0.646857 0.754992     0.646058
+```
+
+Hyperparameter를 튜닝하지 않고 엔진에서 제공하는 기본값으로 모델링한 경우 3가지 모형의 성능은 모두 비슷하지만, Ridge의 효과를 이용한 Logistic regression의 성능이 (근소하지만) 가장 좋게 나타난다. 또한 resampling scheme을 통해 training set의 성능을 계산했기 때문에 과적합의 문제도 발생하지 않았다. 
+
+### 04-03. Hyperparameter tuning
+
+이제 위에서 정의한 기본 모형들에 대해서 tuning을 통해 최적의 hyperparameter 조합을 찾아보자.
+
+튜닝은 두 단계의 과정을 진행한다. 우선 3가지 모델에서 튜닝하고자 하는 hyperparameter에 대해 간단히 소개하자면 아래와 같다:
+
+> [!tldr] Hyperparameters
+> #### Elastic net Logistic regression - `glmnet`
+> - `penalty`: 모형의 정규화 강도를 결정
+> 	-  이 값이 클수록 계수를 더 강하게 축소해 모형의 복잡도를 줄이고, 과적합을 방지할 수 있음
+> - `mixture`: Lasso와 Ridge 간의 혼합 비율을 결정
+> 	- 0 ~ 1 값을 가짐
+>  $$\text{Minimize} \left( \text{Loss(Data, Model)} + \lambda \left[ \alpha \sum |\beta_j| + \frac{1 - \alpha}{2} \sum \beta_j^2 \right] \right)$$
+> 	 - $\lambda$가 `penalty`에 해당하며, $\alpha$가 `mixture`이고, $\beta_j$는 모형의 계수임
+> #### Random Forest - `ranger`
+>  - `trees`: 생성할 base model인 tree의 수
+> 	 - bagging 모형에 대해서 tree의 수를 tuning할 필요는 없기 때문에 해당 값은 단일 값으로 지정
+> 	 - default: `500L`
+> - `mtry`: base model의 각 tree 구축 시 random으로 선택되는 predictor의 수
+> 	- default: `floor(sqrt(ncol(x)))` - 사용 가능한 predictor 수의 제곱근
+> 	- `mtry`가 작으면 base tree 간 상관관계가 감소하여 모델의 다양성이 증가할 수 있으나, 너무 작으면 각 base tree의 성능이 저하될 수 있음
+> - `min_n`: base model인 tree의 각 노드에서 필요한 최소 샘플 수
+> 	- default: 
+> 		- regression: `5L`
+> 		- classification: `10L`
+> 	- `min_n`이 크면 모델이 단순해져 과적합의 위험이 감소하지만, 너무 크면 데이터의 세부 사항을 놓칠 위험이 있음
+> #### LightGBM - `lightgbm`
+> - `mtry`: 각 분할에서 random selection 되는 predictors의 수 
+> - `trees`: 생성할 trees의 수 
+> 	- 모델의 복잡성과 성능에 영향을 줌
+> - `tree_depth`: 각 tree의 최대 깊이
+> 	- 너무 깊은 트리는 복잡한 모형을 만들어 과적합의 위험이 있음
+> - `learn_rate`: 학습률, 각 tree가 최종 예측에 기여하는 정도
+> 	- `trees`와 연관이 있음
+> 		- 낮은 학습률 사용 시 많은 수의 `trees`가 필요함
+> - `min_n`: 노드의 최소 샘플 수
+> - `loss_reduction`:  tree의 분할을 수행하기 위한 최소 손실 감소
+> 	- 이 값이 클수록 tree의 성장이 제한됨
+
+```r
+### Tuning
+glmnet_tune_spec <- 
+  logistic_reg(mode = 'classification',
+               engine = 'glmnet',
+               penalty = tune(),
+               mixture = tune())
+RF_tune_spec <- 
+  rand_forest(mode = 'classification',
+              engine = 'ranger',
+              trees = 1000L,
+              mtry = tune(),
+              min_n = tune())
+LGBM_tune_spec <- 
+  boost_tree(mode = 'classification',
+             engine = 'lightgbm',
+             trees = tune(),
+             mtry = tune(),
+             min_n = tune(),
+             tree_depth = tune(),
+             learn_rate = tune(),
+             loss_reduction = tune())
+```
+
+- tree-based models에는 각 분할에 쓰이는 임의로 선택되는 변수의 수 `mtry`가 parameter로 튜닝의 대상임
+- 이 parameter는 데이터가 적용되기 전에는 사전에 범위를 알 수 없음
+	- 따라서 training set을 통해 튜닝 전에 해당 값의 범위를 finalize하는 것이 좋음
+	- tree-based 모델의 spec에 `update()`로 범위를 할당한 다음, workflowset에 `option_add()`로 튜닝 전 hyperparameter 범위 지정
+```r
+RF_tune_spec %>% 
+   extract_parameter_set_dials()
+```
+```
+Collection of 2 parameters for tuning
+
+ identifier  type    object
+       mtry  mtry nparam[?]
+      min_n min_n nparam[+]
+
+Model parameters needing finalization:
+   # Randomly Selected Predictors ('mtry')
+
+See `?dials::finalize` or `?dials::update.parameters` for more information.
+```
+```r
+LGBM_tune_spec %>% 
+  extract_parameter_set_dials()
+```
+```r
+Collection of 6 parameters for tuning
+
+     identifier           type    object
+           mtry           mtry nparam[?]
+          trees          trees nparam[+]
+          min_n          min_n nparam[+]
+     tree_depth     tree_depth nparam[+]
+     learn_rate     learn_rate nparam[+]
+ loss_reduction loss_reduction nparam[+]
+
+Model parameters needing finalization:
+   # Randomly Selected Predictors ('mtry')
+
+See `?dials::finalize` or `?dials::update.parameters` for more information.
+```
+```r
+RF_tune_spec %>%
+  extract_parameter_dials("mtry")
+```
+```
+# Randomly Selected Predictors (quantitative)
+Range: [1, ?]
+```
+
+
+- `mtry()` 범위 지정:
+```r
+RF_params <- 
+  RF_tune_spec %>% 
+  extract_parameter_set_dials() %>% 
+  update(mtry = finalize(mtry(),
+                         tree_rec %>% prep() %>% bake(train)))
+LGBM_params <- 
+  LGBM_tune_spec %>% 
+  extract_parameter_set_dials() %>% 
+  update(mtry = finalize(mtry(),
+                         tree_rec %>% prep() %>% bake(train)))
+tune_wflows <-
+  bind_rows(
+    workflow_set(preproc = list(dummy_trans = glm_rec),
+                 models = list(glmnet = glmnet_tune_spec),
+                 cross = T),
+    workflow_set(preproc = list(dummy = tree_rec),
+                 models = list(RF = RF_tune_spec,
+                               LGBM = LGBM_tune_spec),
+                 cross = T)
+  )
+
+tune_wflows <- tune_wflows %>% 
+  option_add(param_info = RF_params, id = "dummy_RF") %>% 
+  option_add(param_info = LGBM_params, id = "dummy_LGBM")
+```
+
+이렇게 3가지 모형의 튜닝을 위해 workflow set을 정의한 다음, [`finetune`](https://github.com/tidymodels/finetune/) 패키지의 **<font style="color:orange">Racing Anova method</font>** 방식으로 최적의 hyperparameter 조합을 찾아보자. 
+- Racing anova method는 grid search를 효율적으로 할 수 있는 방법
+	- 주어진 parameter grids에 대해 모든 resamples에 모든 model들을 적합해야 한다는 비효율성을 개선한 것
+	- Parameter grids의 각 조합에 대해 resamples의 일부만을 사용해 성능을 평가한 다음 성능이 나쁜 하위 조합들을 조기에 탈락시킴
+	- 이때 성능치를 anova 모형을 통해 탈락 기준을 정함
+	- 남은 조합에 대해 이를 반복 측정해 탈락시킴
+	- 최종적으로 1개의 조합만 남을 경우 해당 조합이 최적의 조합이 되고, 2개 이상이 남을 경우 더 좋은 성능을 내는 조합이 최적의 조합으로 선정
+- Racing anova는 이러한 방식으로 작동해서 넓은 hyperparameter space인 상황에서 computational cost가 한정적일 때 매우 유용한 방법임
 
