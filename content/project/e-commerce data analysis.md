@@ -1,5 +1,6 @@
 ---
 sticker: emoji//1f525
+date: 2023-12-08
 tags:
   - ML
   - e-commerce
@@ -10,6 +11,7 @@ tags:
   - datamart
   - pre-processing
   - tidymodels
+  - Online-Retail
 ---
 해당 글은 [패스트캠퍼스](https://fastcampus.co.kr/data_online_msignature) 강의 내용을 참고하여 작성하였습니다. 
 
@@ -906,5 +908,393 @@ df_mart %>% dim()
 [1] 7495 17
 ```
 
-### 03-03. Numeric Feature Engineering
+## 04. Build the recipe & workflow
+
+### 04-01. Pre-processing data with recipes
+
+Tidymodels 프레임워크에서 모델링을 하려면 우선 모델링 대상이 되는 데이터(여기선 `df_mart`)가 모델별 적절한 recipe(모델링 전에 데이터에 적용되는 feature engineering 및 전처리)를 가져야 하고, 모델의 명세/사양(specification; spec)이 정의된 workflow가 필요하다. 이를 위해 우선 앞서 구축한 Data Mart인 `df_mart`를 살펴보고 적절한 recipe를 만들어보자.
+
+> [!example]- Libraries load
+> ```r
+> suppressPackageStartupMessages({
+>   library(tidyverse)  # contains dplyr, ggplot and our data set
+>   library(vip)        # variable importance plots
+>   library(finetune)   # package for more advanced hyperparameter tuning  
+>   library(doParallel) # parallelisation package   
+>   library(tictoc)     # measure how long processes take
+>   library(tidymodels) # the main tidymodels packages all in one place - loaded last to overwrite any conflicts
+>   library(ggsci)
+>   library(patchwork)
+>   library(moments)
+>   library(GGally)
+>   library(corrplot)
+>   library(bonsai)
+>   library(workflowsets)
+> })
+> tidymodels_prefer()
+> ```
+
+
+- 우선 국적 `Country`에 대해 살펴보면 대부분이 영국임을 알 수 있다. 따라서 영국을 제외한 나머지 값들을 기타(`'ETC'`) 국가로 변경하자.
+
+> [!note]- code fold
+> ```r
+> df_mart %>% 
+>   ggplot(aes(x=Country, fill = factor(target))) +
+>   geom_bar(position = "dodge") +
+>   theme_minimal() +
+>   coord_flip() +
+>   labs(fill = "Target", x = "Country", y = "Count")
+> ```
+
+![[Pasted image 20240220143008.png|center]]
+
+```r
+df_mart %>% 
+  count(Country) %>% 
+  arrange(desc(n)) %>% 
+  mutate(ratio = n/sum(n))
+```
+```
+# A tibble: 33 × 3
+   Country            n      ratio
+   <fct>          <int>      <dbl>
+ 1 United Kingdom  6871 0.916744  
+ 2 Germany          150 0.0200133 
+ 3 France           144 0.0192128 
+ 4 Belgium           38 0.00507005
+ 5 Spain             33 0.00440294
+ 6 Australia         25 0.00333556
+ 7 Italy             25 0.00333556
+ 8 Netherlands       23 0.00306871
+ 9 Switzerland       23 0.00306871
+10 Portugal          22 0.00293529
+# ℹ 23 more rows
+# ℹ Use `print(n = ...)` to see more rows
+```
+```r
+# UK 이외의 기타 국가로 처리
+df_mart <- df_mart %>% 
+  mutate(Country = ifelse(Country=="United Kingdom", "UK", "ETC")) 
+```
+
+
+ - 문자형 변수 3개 `factor`형으로 변환해주기
+ ```r
+ df_mart <- df_mart %>% 
+ mutate(across(c(Country, peak_time, season), factor))
+ ```
+
+#### Splitting our data
+
+주어진 데이터 `df_mart`의 `target` 값을 층(`strata`)으로 지정해서 test set의 size를 30%로 하여 데이터를 분할 하자:
+
+```r
+set.seed(123)
+
+#### Create train-test set
+split <- initial_split(df_mart, prop = 0.7, strata = target)
+#### Create folds to for resampling on the Train set
+train <- training(split)
+test <- testing(split)
+split
+```
+```
+<Training/Testing/Total>
+<5245/2250/7495>
+```
+
+- training set과 test set의 `target` 비율을 살펴보면 동일한 것을 확인할 수 있음:
+```
+# Confirm distribution is the same
+> summary(train$target)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.0000  0.0000  0.3813  1.0000  1.0000 
+> summary(test$target)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.0000  0.0000  0.3813  1.0000  1.0000
+```
+
+#### Explore the data
+
+이제 `train` 데이터를 이용해 적절한 pre-processing 방법을 찾아보자. 이때 `skimr` 패키지의 `skim()` 함수를 이용해 변수별 간략한 정보를 확인할 수 있다:
+
+> [!example]- `skim()`을 통한 변수별 정보
+> ```
+> > skimr::skim(train %>% select(-c(bsym, CustomerID)))
+> ── Data Summary ────────────────────────
+>                            Values                      
+> Name                       train %>% select(-c(bsym,...
+> Number of rows             5245                        
+> Number of columns          15                          
+> _______________________                                
+> Column type frequency:                                 
+>   factor                   3                           
+>   numeric                  12                          
+> ________________________                               
+> Group variables            None                        
+> 
+> ── Variable type: factor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>   skim_variable n_missing complete_rate ordered n_unique top_counts                               
+> 1 Country               0             1 FALSE          2 UK: 4799, ETC: 446
+> 2 peak_time             0             1 FALSE          3 Aft: 3408, Mor: 1737, Eve: 100           
+> 3 season                0             1 FALSE          4 Aut: 1790, Sum: 1231, Spr: 1229, Win: 995
+> 
+> ── Variable type: numeric ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>    skim_variable n_missing complete_rate        mean           sd        p0         p25         p50         p75         p100 hist 
+>  1 total_amt             0             1 679.238     1804.28      0         211.35      346.45      624.58      51031.7      ▇▁▁▁▁
+>  2 max_amt               0             1 517.340     1258.98      0         196.93      319.19      517.53      44051.6      ▇▁▁▁▁
+>  3 min_amt               0             1 352.274      407.216     0         141.7       272.95      405.3        7544.91     ▇▁▁▁▁
+>  4 total_cnt             0             1   1.46806      1.25913   1           1           1           2            19        ▇▁▁▁▁ 
+>  5 max_cnt               0             1  24.6982      23.1251    1          10          18          31           250        ▇▁▁▁▁ 
+>  6 min_cnt               0             1  19.7607      20.7346    1           6          15          25           220        ▇▁▁▁▁ 
+>  7 total_qty             0             1 389.856      943.241     1         102         194         368         26687        ▇▁▁▁▁
+>  8 max_qty               0             1  62.6633     173.947     1          16          25          48          7128        ▇▁▁▁▁
+>  9 min_qty               0             1   8.33136     60.1779    1           1           2           3          2000        ▇▁▁▁▁
+> 10 freq                  0             1   0.0482555    0.0413473 0.0322581   0.0322581   0.0333333   0.0645161     0.633333 ▇▁▁▁▁
+> 11 avg_amt               0             1 418.745      553.660     0         180.93      306         458.343     13305.5      ▇▁▁▁▁
+> 12 target                0             1   0.381316     0.485756  0           0           0           1             1        ▇▁▁▁▅
+> ```
+
+- 범주형 변수는 3개이고, 수치형 변수는 `target` 제외 11개가 있다. 데이터를 보면 수치형 변수들이 모두 오른쪽 꼬리(right-skewed)를 가지고 있다. Recipe를 구성하기 전에 우선 범주형 변수의 각 수준별로 `target`의 비율이 어떻게 다른지 살펴보자:
+
+> [!note]- code fold
+> ```r
+> categorical_vars <- train %>% 
+>   select(-c(bsym, CustomerID)) %>% 
+>   select_if(is.factor) %>% 
+>   names()
+> ## Categorical variables
+> plot_categorical <- function(cat){
+>   cat <- ensym(cat)
+>   train %>%
+>     group_by(!!cat) %>%
+>     reframe(prop = mean(target, na.rm = T)) %>% 
+>     mutate(across(!!cat, ~reorder(.x, prop))) %>% 
+>     ggplot(aes(x = !!cat, y = prop, fill = !!cat)) +
+>     geom_col(color = 'black', alpha = 0.6) +
+>     geom_text(aes(label = scales::percent(prop, accuracy = 0.01)), vjust  = 1.5) +
+>     scale_color_nejm() +
+>     scale_fill_nejm() + 
+>     ggtitle(paste0("Target rate by level of ", as.character(cat))) +
+>     guides(fill = "none") +
+>     theme_light()
+> }
+> cat_p <- map(categorical_vars, plot_categorical)
+> cat_p[[1]] + cat_p[[2]] + cat_p[[3]]
+> ```
+
+![[Pasted image 20240220143554.png|center|500]]
+`skim()`을 통해 보았을 때 범주형 변수의 각 수준별 도수에는 큰 차이를 보였으나, 각 수준별 재구매(`target`)의 비율은 약간의 차이만 보이고 있다. 하지만 수준별로 어느 정도 비율에서 차이를 보이기 때문에 범주형 변수가 `target`의 영향을 미칠 수 있을 것으로 판단된다. 
+
+이제 수치형 변수에 대해 살펴보자. 앞서 `skim()`을 통해 11개의 수치형 변수들의 간단한 히스토그램과 사분위수를 보아 상당히 right-skewed 되어 있으며, 값이 굉장히 큰 이상치가 많았다. 
+
+- 각 수치형 변수에 대해 왜도를 계산해보자:
+	- 월별 최소 구매수량 `min_qty`가 가장 긴 우측 꼬리를 가지고 있음
+> [!note]- code fold
+> ```r
+> #### 수치형 변수에 대해 왜도 계산
+> numeric_vars <- train %>% 
+>   select(-c(bsym, CustomerID)) %>% 
+>   select_if(is.numeric) %>% 
+>   select(-target) %>% 
+>   names()
+> 
+> num_skew <- map(numeric_vars, ~ skewness(train %>% pull(.x))) %>% 
+>   unlist()
+> names(num_skew) <- numeric_vars
+> ```
+```
+> num_skew
+
+total_amt   max_amt   min_amt total_cnt   max_cnt   min_cnt total_qty   max_qty   min_qty      freq   avg_amt 
+15.568941 20.722585  5.659813  6.242186  2.523002  2.640569 11.841334 19.602134 21.010613  6.224407  9.399795
+```
+
+- 아래와 같이 수치형 변수의 대략적인 분포를 보면 음의 값을 가지는 않지만 최소값으로 0을 갖는 변수들이 존재하므로 Box-Cox 변환 대신 [Yeo-Johnson 변환](https://en.wikipedia.org/wiki/Power_transform)을 적용하는 것이 좋아보임
+```r
+map_dfr(numeric_vars, ~summary(train %>% pull(.x))) %>% 
+  mutate(var = numeric_vars, .before = Min.)
+```
+```
+# A tibble: 11 × 7
+   var       Min.        `1st Qu.`    Median       Mean         `3rd Qu.`    Max.        
+   <chr>     <table[1d]> <table[1d]>  <table[1d]>  <table[1d]>  <table[1d]>  <table[1d]> 
+ 1 total_amt 0.00000000  211.35000000 346.45000000 679.23801849 624.58000000 5.103173e+04 
+ 2 max_amt   0.00000000  196.93000000 319.19000000 517.34002212 517.53000000 4.405160e+04 
+ 3 min_amt   0.00000000  141.70000000 272.95000000 352.27419333 405.30000000 7.544910e+03 
+ 4 total_cnt 1.00000000    1.00000000   1.00000000   1.46806482   2.00000000 1.900000e+01 
+ 5 max_cnt   1.00000000   10.00000000  18.00000000  24.69818875  31.00000000 2.500000e+02 
+ 6 min_cnt   1.00000000    6.00000000  15.00000000  19.76072450  25.00000000 2.200000e+02 
+ 7 total_qty 1.00000000  102.00000000 194.00000000 389.85605338 368.00000000 2.668700e+04 
+ 8 max_qty   1.00000000   16.00000000  25.00000000  62.66329838  48.00000000 7.128000e+03 
+ 9 min_qty   1.00000000    1.00000000   2.00000000   8.33136320   3.00000000 2.000000e+03
+10 freq      0.03225806    0.03225806   0.03333333   0.04825553   0.06451613 6.333333e-01
+11 avg_amt   0.00000000  180.93000000 306.00000000 418.74534443 458.34285714 1.330550e+04
+```
+
+우선 변수 변환 등의 전처리 작업을 하기 전에 모델의 formula만을 가지고 있는 basic recipe(`basic_rec`)을 정의하자.
+
+- `basic_rec`에 `data_mart` 구성 시 key 변수의 역할을 했던 `bsym`과 `CustomerID`를 `"ID"` 역할로 지정함으로써 모델링 때 이 변수들을 제거하지 않고 진행할 수 있음
+```r
+basic_rec <- recipe(formula = target ~ ., data = train) 
+basic_rec <- basic_rec %>% 
+	update_role(bsym, CustomerID, new_role = "ID")
+```
+```
+> basic_rec
+
+── Recipe ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+── Inputs 
+Number of variables by role
+outcome:    1
+predictor: 14
+ID:         2
+```
+
+- Yeo-Johnson 변환 전후의 분포 비교:
+
+> [!note]- code fold
+> ```r
+> before_trans <- function(num){
+>   num <- ensym(num)
+>   basic_rec %>% 
+>     prep(train) %>% 
+>     bake(train) %>% 
+>     ggplot(aes(x = !!num)) + 
+>     geom_histogram(color = 'black', fill = 'skyblue') +
+>     theme_light() +
+>     theme(axis.title.y = element_blank(),
+>           axis.text.y = element_blank(),
+>           axis.ticks.y = element_blank())
+> }
+> before_trans_plot <- map(numeric_vars, before_trans)
+> before_trans_plot[[1]]+before_trans_plot[[2]]+before_trans_plot[[3]]+
+>   before_trans_plot[[4]]+before_trans_plot[[5]]+before_trans_plot[[6]]+
+>   before_trans_plot[[7]]+before_trans_plot[[8]]+before_trans_plot[[9]]+
+>   before_trans_plot[[10]]+before_trans_plot[[11]] +
+>   plot_layout(ncol = 3) +
+>   plot_annotation(title = "Before Transformation",
+>                   theme = theme(plot.title = element_text(hjust = 0.5))) 
+> ```
+
+![[Pasted image 20240220153122.png|center]]
+
+> [!note]- code fold
+> ```r
+> after_trans <- function(num){
+>   num <- ensym(num)
+>   basic_rec %>% 
+>     step_YeoJohnson(!!num) %>% # Yeo-Johnson 변환
+>     prep(train) %>% 
+>     bake(train) %>% 
+>     ggplot(aes(x = !!num)) + 
+>     geom_histogram(color = 'black', fill = 'skyblue') +
+>     theme_light() +
+>     theme(axis.title.y = element_blank(),
+>           axis.text.y = element_blank(),
+>           axis.ticks.y = element_blank())
+> }
+> after_trans_plot <- map(numeric_vars, after_trans)
+> after_trans_plot[[1]]+after_trans_plot[[2]]+after_trans_plot[[3]]+
+>   after_trans_plot[[4]]+after_trans_plot[[5]]+after_trans_plot[[6]]+
+>   after_trans_plot[[7]]+after_trans_plot[[8]]+after_trans_plot[[9]]+
+>   after_trans_plot[[10]]+after_trans_plot[[11]] +
+>   plot_layout(ncol = 3) +
+>   plot_annotation(title = "After Yeo-Johnson Transformation",
+>                   theme = theme(plot.title = element_text(hjust = 0.5)))
+> ```
+
+![[Pasted image 20240220153554.png|center]]
+
+그런 다음 Yeo-Johnson 변환 후의 수치형 변수들에 대해 `target`과 어떠한 관계가 있는지 boxplot with violin plot을 살펴보자. 
+- 수치형 변수들과 재구매 `target`의 관계를 아래와 같이 단순하게 살펴보았을 때는 눈에 띄는 차이는 파악되지 않음
+- 하지만 각 변수별로 이상치로 판단되는 값이 많기 때문에 이에 대해 추가적으로 고려할 필요가 있음
+> [!note]- code fold
+> ```r
+> #### Yeo-Johnson 변환 후 target 변수와의 관계 확인 - boxplot with violin plot
+> plot_numerical <- function(num){
+>   num <- ensym(num)
+>   basic_rec %>% 
+>     step_YeoJohnson(all_numeric_predictors()) %>% 
+>     prep(train) %>% 
+>     bake(train) %>% 
+>     mutate(target = factor(target)) %>% 
+>     ggplot(aes(x = target, y = !!num, fill = target)) +
+>     geom_violin(width=1) +
+>     geom_boxplot(width = 0.3, alpha=0.7) +
+>     # scale_fill_viridis(discrete = TRUE) +
+>     coord_flip() + 
+>     theme_light() +
+>     guides(color = 'none') +
+>     theme(legend.position = "none")
+> }
+> num_p <- map(numeric_vars, plot_numerical)
+> num_p[[1]]+num_p[[2]]+num_p[[3]]+
+>   num_p[[4]]+num_p[[5]]+num_p[[6]]+
+>   num_p[[7]]+num_p[[8]]+num_p[[9]]+
+>   num_p[[10]]+num_p[[11]] + 
+>   plot_layout(ncol = 3)
+> ```
+
+![[Pasted image 20240220155325.png|center]]
+
+이제 변수 간 상관관계를 살펴보자. 데이터에는 범주형 변수도 있으므로 피어슨 상관계수만을 사용할 수 없다. 대신 다른 변수 중 하나를 입력으로 해서 수치형 변수 하나를 예측하는 선형 모델을 훈련시킨 다음 설명 분산을 측정해 그것의 제곱근을 구하는 방식을 적용할 수 있다. 이는 숫자형 변수를 입력으로 할 때 피어슨 상관계수의 절대값과 동일하다. 중요한 것은 입력으로 범주형 변수도 사용할 수 있다는 것이다.
+- 구매빈도 `freq`는 구매 건수 `total_cnt`를 월별 일수로 단순히 나누어 계산한 값이므로 상관계수가 거의 1로 계산됨
+- `total_cnt`는 제거하고 진행
+> [!note]- code fold
+> ```r
+> #### 변수별 상관관계 - ANOVA 설명 분산량
+> mycor <- function(cnames, dat){
+>   x.num <- dat %>% pull(cnames[1])
+>   x.cat <- dat %>% pull(cnames[2])
+>   
+>   suppressWarnings({
+>     av <- anova(lm(x.num ~ x.cat))
+>   })
+>   sqrt(av$`Sum Sq`[1] / sum(av$`Sum Sq`))
+> }
+> 
+> cnames <- basic_rec %>% 
+>   step_YeoJohnson(all_numeric_predictors()) %>% 
+>   prep(train) %>% 
+>   bake(train) %>% 
+>   mutate(target = factor(target)) %>% 
+>   select_if(is.numeric) %>% names()
+> combs <- expand.grid(y = cnames, 
+>                      x = setdiff(names(train %>% select(-c(bsym, CustomerID))), "target"))
+> combs$cor <- apply(combs, 1, mycor, 
+>                   dat = basic_rec %>% 
+>                     step_YeoJohnson(all_numeric_predictors()) %>% 
+>                     prep(train) %>% 
+>                     bake(train) )
+> combs$lab <- sprintf("%.2f", combs$cor)
+> forder <- c(cnames, setdiff(unique(combs$x), cnames))
+> 
+> combs <- combs %>% 
+>   mutate(x = factor(x, levels = forder),
+>          y = factor(y, levels = rev(cnames)))
+> 
+> combs %>% 
+>   ggplot(aes(x = x, y = y, fill = cor, label = lab)) +
+>   geom_tile() +
+>   geom_label(fill = "white", size = 3) +
+>   theme_light() +
+>   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+>   scale_x_discrete("") +
+>   scale_y_discrete("") +
+>   scale_fill_viridis("Variance\nexplained", begin = 0.2)
+> ```
+
+![[Pasted image 20240220161852.png|center]]
+
+```r
+#### total_cnt 제거
+basic_rec <- basic_rec %>% 
+  step_rm(total_cnt)
+```
+
+
+#### Dummy encoding
 
