@@ -983,7 +983,7 @@ df_mart <- df_mart %>%
  - 문자형 변수 3개 `factor`형으로 변환해주기 + `target`도 `factor`형 지정
  ```r
  df_mart <- df_mart %>% 
- mutate(across(c(Country, peak_time, season), factor))
+	 mutate(across(c(Country, peak_time, season), factor))
  ```
 
 #### Splitting our data
@@ -1139,6 +1139,8 @@ map_dfr(numeric_vars, ~summary(train %>% pull(.x))) %>%
 
 - `basic_rec`에 `data_mart` 구성 시 key 변수의 역할을 했던 `bsym`과 `CustomerID`를 `"ID"` 역할로 지정함으로써 모델링 때 이 변수들을 제거하지 않고 진행할 수 있음
 ```r
+df_mart <- df_mart %>% 
+  mutate(target = factor(target))
 basic_rec <- recipe(formula = target ~ ., data = train) 
 basic_rec <- basic_rec %>% 
 	update_role(bsym, CustomerID, new_role = "ID")
@@ -1223,7 +1225,6 @@ ID:         2
 >     step_YeoJohnson(all_numeric_predictors()) %>% 
 >     prep(train) %>% 
 >     bake(train) %>% 
->     mutate(target = factor(target)) %>% 
 >     ggplot(aes(x = target, y = !!num, fill = target)) +
 >     geom_violin(width=1) +
 >     geom_boxplot(width = 0.3, alpha=0.7) +
@@ -1263,7 +1264,6 @@ ID:         2
 >   step_YeoJohnson(all_numeric_predictors()) %>% 
 >   prep(train) %>% 
 >   bake(train) %>% 
->   mutate(target = factor(target)) %>% 
 >   select_if(is.numeric) %>% names()
 > combs <- expand.grid(y = cnames, 
 >                      x = setdiff(names(train %>% select(-c(bsym, CustomerID))), "target"))
@@ -1441,7 +1441,7 @@ train_cv
 	- Hyperparameter 결정
 
 - 여기서 사용할 모델: 
-	1. **<font style="color:orange">Logistic regression</font>** with [`glmnet`](https://glmnet.stanford.edu/articles/glmnet.html)
+	1. **<font style="color:orange">Logistic</font>** with [`glmnet`](https://glmnet.stanford.edu/articles/glmnet.html)
 		- `glmnet` 엔진을 사용하는 이유는 여러 수치형 변수들 간 다중공선성이 의심되기 때문에 이를 잡아줄 Ridge 효과를 위해 Elastic Net을 사용하기 위함
 		- Hyperparameter tuning 전에는 우선 Ridge 모형으로 진행
 	1. **<font style="color:orange">Random Forest</font>** with [`ranger`](https://parsnip.tidymodels.org/reference/details_rand_forest_ranger.html)
@@ -1464,9 +1464,9 @@ lgbm_spec <-
 
 #### Putting it all together with worflows
 
-[모델별 전처리](https://www.tmwr.org/pre-proc-table)에 모델별로 권장되는 recipe/pre-processing 기법이 다르다. 따라서 Logistic regression과 tree-based models은 서로 다른 recipe를 사용하는 것이 좋아보인다.
+[모델별 전처리](https://www.tmwr.org/pre-proc-table)에 모델별로 권장되는 recipe/pre-processing 기법이 다르다. 따라서 Logistic과 tree-based models은 서로 다른 recipe를 사용하는 것이 좋아보인다.
 
-- Logistic regression을 위한 recipe와 tree-based models를 위한 recipe 두 가지를 정의
+- Logistic 모형을 위한 recipe와 tree-based models를 위한 recipe 두 가지를 정의
 	- `glm_rec`: [`step_normalize()`](https://recipes.tidymodels.org/reference/step_normalize.html)를 통해 수치형 변수 표준화 추가
 	- `tree_rec`: 범주형 변수 dummy 처리 + near zero variance 변수 처리
 ```r
@@ -1536,7 +1536,7 @@ i 3 of 3 resampling: dummy_LGBM
 
 - 성능 비교하기:
 	- 비교 기준 - 1순위: f1-score, 2순위: AUROC
-	- 1등: `glmnet`을 이용한 (Ridge) Logistic regression
+	- 1등: `glmnet`을 이용한 (Ridge) Logistic 모형
 
 ```r
 basic_models %>% 
@@ -1613,7 +1613,7 @@ before_tuning
 3 LGBM   0.762929      0.646857 0.754992     0.646058
 ```
 
-Hyperparameter를 튜닝하지 않고 엔진에서 제공하는 기본값으로 모델링한 경우 3가지 모형의 성능은 모두 비슷하지만, Ridge의 효과를 이용한 Logistic regression의 성능이 (근소하지만) 가장 좋게 나타난다. 또한 resampling scheme을 통해 training set의 성능을 계산했기 때문에 과적합의 문제도 발생하지 않았다. 
+Hyperparameter를 튜닝하지 않고 엔진에서 제공하는 기본값으로 모델링한 경우 3가지 모형의 성능은 모두 비슷하지만, Ridge의 효과를 이용한 Logistic 모형의 성능이 (근소하지만) 가장 좋게 나타난다. 또한 resampling scheme을 통해 training set의 성능을 계산했기 때문에 과적합의 문제도 발생하지 않았다. 
 
 ### 04-03. Hyperparameter tuning
 
@@ -1622,7 +1622,7 @@ Hyperparameter를 튜닝하지 않고 엔진에서 제공하는 기본값으로 
 튜닝은 두 단계의 과정을 진행한다. 우선 3가지 모델에서 튜닝하고자 하는 hyperparameter에 대해 간단히 소개하자면 아래와 같다:
 
 > [!tldr] Hyperparameters
-> #### Elastic net Logistic regression - `glmnet`
+> #### Elastic net Logistic - `glmnet`
 > - `penalty`: 모형의 정규화 강도를 결정
 > 	-  이 값이 클수록 계수를 더 강하게 축소해 모형의 복잡도를 줄이고, 과적합을 방지할 수 있음
 > - `mixture`: Lasso와 Ridge 간의 혼합 비율을 결정
@@ -1764,4 +1764,462 @@ tune_wflows <- tune_wflows %>%
 	- 남은 조합에 대해 이를 반복 측정해 탈락시킴
 	- 최종적으로 1개의 조합만 남을 경우 해당 조합이 최적의 조합이 되고, 2개 이상이 남을 경우 더 좋은 성능을 내는 조합이 최적의 조합으로 선정
 - Racing anova는 이러한 방식으로 작동해서 넓은 hyperparameter space인 상황에서 computational cost가 한정적일 때 매우 유용한 방법임
+
+이제 위와 같이 만든 hyperparameter grids에 대해 racing method로 튜닝해보자. 마찬가지로 비교 성능 1순위는 f1-score, 2순위는 AUROC로 선정했다. 
+
+```r
+#### Racing anova method를 통한 hyperparameter tuning
+cl <- makePSOCKcluster(8)
+registerDoParallel(cl)
+getDoParWorkers()
+tic()
+race_ctrl <- control_race(verbose_elim = T,
+                          save_pred = T,
+                          save_workflow = T,
+                          parallel_over = "everything")
+race_results <- 
+  tune_wflows %>% 
+  workflow_map("tune_race_anova",
+               seed = 1234,
+               resamples = train_cv,
+               grid = 50,
+               control = race_ctrl,
+               metrics = metric_set(f_meas, roc_auc),
+               verbose = T)
+toc()
+stopCluster(cl)
+registerDoSEQ()
+```
+
+> [!example]- code results
+> ```
+> i 1 of 3 tuning:     dummy_trans_glmnet
+> ℹ Racing will maximize the f_meas metric.
+> ℹ Resamples are analyzed in a random order.
+> ℹ Fold08, Repeat1: 5 eliminated; 45 candidates remain.
+> ℹ Fold10, Repeat1: 1 eliminated; 44 candidates remain.
+> ℹ Fold03, Repeat1: 30 eliminated; 14 candidates remain.
+> ℹ Fold02, Repeat1: 0 eliminated; 14 candidates remain.
+> ℹ Fold04, Repeat1: 0 eliminated; 14 candidates remain.
+> ℹ Fold06, Repeat1: 0 eliminated; 14 candidates remain.
+> ℹ Fold09, Repeat1: 0 eliminated; 14 candidates remain.
+> ℹ Fold05, Repeat1: 3 eliminated; 11 candidates remain.
+> ℹ Fold09, Repeat2: 0 eliminated; 11 candidates remain.
+> ℹ Fold10, Repeat2: 1 eliminated; 10 candidates remain.
+> ℹ Fold08, Repeat2: 1 eliminated; 9 candidates remain.
+> ℹ Fold03, Repeat2: 1 eliminated; 8 candidates remain.
+> ℹ Fold07, Repeat2: 2 eliminated; 6 candidates remain.
+> ℹ Fold05, Repeat2: 1 eliminated; 5 candidates remain.
+> ℹ Fold02, Repeat2: 1 eliminated; 4 candidates remain.
+> ℹ Fold01, Repeat2: 0 eliminated; 4 candidates remain.
+> ℹ Fold06, Repeat2: 0 eliminated; 4 candidates remain.
+> ℹ Fold04, Repeat2: 0 eliminated; 4 candidates remain.
+> ℹ Fold04, Repeat3: 0 eliminated; 4 candidates remain.
+> ℹ Fold10, Repeat3: 0 eliminated; 4 candidates remain.
+> ℹ Fold03, Repeat3: 0 eliminated; 4 candidates remain.
+> ℹ Fold05, Repeat3: 0 eliminated; 4 candidates remain.
+> ℹ Fold02, Repeat3: 0 eliminated; 4 candidates remain.
+> ℹ Fold01, Repeat3: 1 eliminated; 3 candidates remain.
+> ℹ Fold07, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold06, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold09, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold08, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold05, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold07, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold08, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold02, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold03, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold01, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold04, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold06, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold10, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold09, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold09, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold03, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold05, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold08, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold06, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold01, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold04, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold02, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold07, Repeat5: 0 eliminated; 3 candidates remain.
+> ✔ 1 of 3 tuning:     dummy_trans_glmnet (1m 38.1s)
+> i 2 of 3 tuning:     dummy_RF
+> ℹ Racing will maximize the f_meas metric.
+> ℹ Resamples are analyzed in a random order.
+> ℹ Fold08, Repeat1: 24 eliminated; 26 candidates remain.
+> ℹ Fold10, Repeat1: 7 eliminated; 19 candidates remain.
+> ℹ Fold03, Repeat1: 11 eliminated; 8 candidates remain.
+> ℹ Fold02, Repeat1: 4 eliminated; 4 candidates remain.
+> ℹ Fold04, Repeat1: 1 eliminated; 3 candidates remain.
+> ℹ Fold06, Repeat1: 0 eliminated; 3 candidates remain.
+> ℹ Fold09, Repeat1: 0 eliminated; 3 candidates remain.
+> ℹ Fold05, Repeat1: 0 eliminated; 3 candidates remain.
+> ℹ Fold09, Repeat2: 0 eliminated; 3 candidates remain.
+> ℹ Fold10, Repeat2: 0 eliminated; 3 candidates remain.
+> ℹ Fold08, Repeat2: 0 eliminated; 3 candidates remain.
+> ℹ Fold03, Repeat2: 0 eliminated; 3 candidates remain.
+> ℹ Fold07, Repeat2: 0 eliminated; 3 candidates remain.
+> ℹ Fold05, Repeat2: 0 eliminated; 3 candidates remain.
+> ℹ Fold02, Repeat2: 0 eliminated; 3 candidates remain.
+> ℹ Fold01, Repeat2: 0 eliminated; 3 candidates remain.
+> ℹ Fold06, Repeat2: 0 eliminated; 3 candidates remain.
+> ℹ Fold04, Repeat2: 0 eliminated; 3 candidates remain.
+> ℹ Fold04, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold10, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold03, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold05, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold02, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold01, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold07, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold06, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold09, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold08, Repeat3: 1 eliminated; 2 candidates remain.
+> ℹ Fold05, Repeat4: 0 eliminated; 2 candidates remain.
+> ℹ Fold07, Repeat4: 0 eliminated; 2 candidates remain.
+> ℹ Fold08, Repeat4: 0 eliminated; 2 candidates remain.
+> ℹ Fold02, Repeat4: 0 eliminated; 2 candidates remain.
+> ℹ Fold03, Repeat4: 0 eliminated; 2 candidates remain.
+> ℹ Fold01, Repeat4: 0 eliminated; 2 candidates remain.
+> ℹ Fold04, Repeat4: 0 eliminated; 2 candidates remain.
+> ℹ Fold06, Repeat4: 0 eliminated; 2 candidates remain.
+> ℹ Fold10, Repeat4: 0 eliminated; 2 candidates remain.
+> ℹ Tie broken!
+> ℹ Fold09, Repeat4: All but one parameter combination were eliminated.
+> ✔ 2 of 3 tuning:     dummy_RF (6m 29.2s)
+> i 3 of 3 tuning:     dummy_LGBM
+> ℹ Racing will maximize the f_meas metric.
+> ℹ Resamples are analyzed in a random order.
+> ℹ Fold08, Repeat1: 35 eliminated; 7 candidates remain.
+> ℹ Fold10, Repeat1: 2 eliminated; 5 candidates remain.
+> ℹ Fold03, Repeat1: 0 eliminated; 5 candidates remain.
+> ℹ Fold02, Repeat1: 0 eliminated; 5 candidates remain.
+> ℹ Fold04, Repeat1: 0 eliminated; 5 candidates remain.
+> ℹ Fold06, Repeat1: 0 eliminated; 5 candidates remain.
+> ℹ Fold09, Repeat1: 0 eliminated; 5 candidates remain.
+> ℹ Fold05, Repeat1: 0 eliminated; 5 candidates remain.
+> ℹ Fold09, Repeat2: 0 eliminated; 5 candidates remain.
+> ℹ Fold10, Repeat2: 0 eliminated; 5 candidates remain.
+> ℹ Fold08, Repeat2: 0 eliminated; 5 candidates remain.
+> ℹ Fold03, Repeat2: 0 eliminated; 5 candidates remain.
+> ℹ Fold07, Repeat2: 0 eliminated; 5 candidates remain.
+> ℹ Fold05, Repeat2: 0 eliminated; 5 candidates remain.
+> ℹ Fold02, Repeat2: 1 eliminated; 4 candidates remain.
+> ℹ Fold01, Repeat2: 0 eliminated; 4 candidates remain.
+> ℹ Fold06, Repeat2: 0 eliminated; 4 candidates remain.
+> ℹ Fold04, Repeat2: 0 eliminated; 4 candidates remain.
+> ℹ Fold04, Repeat3: 0 eliminated; 4 candidates remain.
+> ℹ Fold10, Repeat3: 0 eliminated; 4 candidates remain.
+> ℹ Fold03, Repeat3: 0 eliminated; 4 candidates remain.
+> ℹ Fold05, Repeat3: 0 eliminated; 4 candidates remain.
+> ℹ Fold02, Repeat3: 1 eliminated; 3 candidates remain.
+> ℹ Fold01, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold07, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold06, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold09, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold08, Repeat3: 0 eliminated; 3 candidates remain.
+> ℹ Fold05, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold07, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold08, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold02, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold03, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold01, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold04, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold06, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold10, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold09, Repeat4: 0 eliminated; 3 candidates remain.
+> ℹ Fold09, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold03, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold05, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold08, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold06, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold01, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold04, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold02, Repeat5: 0 eliminated; 3 candidates remain.
+> ℹ Fold07, Repeat5: 0 eliminated; 3 candidates remain.
+> ✔ 3 of 3 tuning:     dummy_LGBM (44m 10s)
+> 3157.36 sec elapsed
+> ```
+
+- [`finetune`](https://github.com/tidymodels/finetune/) 패키지의 [`tune_race_anova()`](https://finetune.tidymodels.org/reference/tune_race_anova.html)를 [`workflow_map()`](https://workflowsets.tidymodels.org/reference/workflow_map.html)에 호출함으로써 Racing anova method를 사용할 수 있음
+	- 8개의 클러스터를 사용해 병렬처리 사용
+- `workflow_map()`의 `grid` 인자에 정수값을 전달하면 space-filling의 한 방법인 [grid-max-entropy](https://dials.tidymodels.org/reference/grid_max_entropy.html)을 통해 hyperparameter의 조합을 생성함 
+	- 이 방식은 parameter spcae를 효율적으로 커버하는 조합을 만들기 위해 space의 어느 부분이든 너무 멀리 떨어져 있지 않도록 조합을 만듦
+	- 이렇게 생성된 50가지 조합 각각에 대해 50개(5 repeats $\times$ 10 folds)의 resamples의 일부를 적합함
+	- 그런 다음 current best 조합과의 anova 모형으로 비교해 성능이 좋지 않은 조합을 탈락시킴
+
+튜닝 과정에 대한 로그를 살펴보면 랜덤 포레스트(`dummy_RF`)는 최종 1가지 조합만 살아남았고, Elastic net(`dummy_trans_glmnet`)과 LightGBM(`dummy_LGBM`)은 각각 3가지 조합이 살아남았다.
+
+아래는 각 모델별 최종 선택된 조합에 대한 모형 성능이다: 
+
+```r
+race_results %>% 
+  rank_results(rank_metric = 'f_meas')
+```
+```
+# A tibble: 14 × 9
+   wflow_id           .config               .metric     mean     std_err     n preprocessor model         rank
+   <chr>              <chr>                 <chr>      <dbl>       <dbl> <int> <chr>        <chr>        <int>
+ 1 dummy_LGBM         Preprocessor1_Model28 f_meas  0.785574 0.000995588    50 recipe       boost_tree       1
+ 2 dummy_LGBM         Preprocessor1_Model28 roc_auc 0.660085 0.00361641     50 recipe       boost_tree       1
+ 3 dummy_LGBM         Preprocessor1_Model30 f_meas  0.785005 0.00117982     50 recipe       boost_tree       2
+ 4 dummy_LGBM         Preprocessor1_Model30 roc_auc 0.660809 0.00346786     50 recipe       boost_tree       2
+ 5 dummy_LGBM         Preprocessor1_Model13 f_meas  0.784488 0.00133313     50 recipe       boost_tree       3
+ 6 dummy_LGBM         Preprocessor1_Model13 roc_auc 0.664492 0.00343699     50 recipe       boost_tree       3
+ 7 dummy_trans_glmnet Preprocessor1_Model42 f_meas  0.783408 0.00113807     50 recipe       logistic_reg     4
+ 8 dummy_trans_glmnet Preprocessor1_Model42 roc_auc 0.655540 0.00388933     50 recipe       logistic_reg     4
+ 9 dummy_trans_glmnet Preprocessor1_Model22 f_meas  0.783183 0.000956813    50 recipe       logistic_reg     5
+10 dummy_trans_glmnet Preprocessor1_Model22 roc_auc 0.654633 0.00390463     50 recipe       logistic_reg     5
+11 dummy_trans_glmnet Preprocessor1_Model38 f_meas  0.782720 0.00105908     50 recipe       logistic_reg     6
+12 dummy_trans_glmnet Preprocessor1_Model38 roc_auc 0.655397 0.00388860     50 recipe       logistic_reg     6
+13 dummy_RF           Preprocessor1_Model49 f_meas  0.781538 0.00117897     50 recipe       rand_forest      7
+14 dummy_RF           Preprocessor1_Model49 roc_auc 0.658974 0.00328914     50 recipe       rand_forest      7
+```
+
+- 1순위 비교 기준 f1-score 기준으로 선정:
+```r
+race_results %>% 
+  rank_results(rank_metric = 'f_meas', select_best = T)
+```
+```
+# A tibble: 6 × 9
+  wflow_id           .config               .metric     mean     std_err     n preprocessor model         rank
+  <chr>              <chr>                 <chr>      <dbl>       <dbl> <int> <chr>        <chr>        <int>
+1 dummy_LGBM         Preprocessor1_Model28 f_meas  0.785574 0.000995588    50 recipe       boost_tree       1
+2 dummy_LGBM         Preprocessor1_Model28 roc_auc 0.660085 0.00361641     50 recipe       boost_tree       1
+3 dummy_trans_glmnet Preprocessor1_Model42 f_meas  0.783408 0.00113807     50 recipe       logistic_reg     2
+4 dummy_trans_glmnet Preprocessor1_Model42 roc_auc 0.655540 0.00388933     50 recipe       logistic_reg     2
+5 dummy_RF           Preprocessor1_Model49 f_meas  0.781538 0.00117897     50 recipe       rand_forest      3
+6 dummy_RF           Preprocessor1_Model49 roc_auc 0.658974 0.00328914     50 recipe       rand_forest      3
+```
+
+> [!note]- code fold
+> ```r
+> race_results %>% 
+>   rank_results() %>%
+>   mutate(model_id = paste(wflow_id, str_sub(.config, -2), sep = "_")) %>% 
+>   select(wflow_id, model, .config, .metric, mean, std_err, rank, model_id) %>% 
+>   mutate(model_id = fct_reorder(model_id, -rank)) %>%
+>   {. ->> res} %>% 
+>   ggplot(aes(x = model_id, y = mean, color = wflow_id)) +
+>   geom_point(size = 4) +
+>   geom_errorbar(aes(x = model_id, color = wflow_id, 
+>                     ymin = mean - std_err,
+>                     ymax = mean + std_err),
+>                 width = diff(range(res$rank))/25) +
+>   facet_wrap(~.metric, scales = "free", nrow = 2) +
+>   scale_color_nejm() +
+>   coord_flip() +
+>   guides(color = 'none') +
+>   labs(y = "performance", title = 'Racing method LGBM wins') +
+>   theme_light() +
+>   theme(plot.title = element_text(hjust = 0.5),
+  >        axis.title = element_blank())
+> ```
+
+![[Pasted image 20240221175618.png|center]]
+
+두 가지 비교 성능을 보았을 때 LightGBM이 가장 좋아보인다. 하지만 3가지 조합에 대해 선택을 해야 하는 상황이다. 앞서 1순위 기준 성능을 f1-score라고 정했기 때문에 f1-score 성능이 가장 높은 `dummy_LGBM_28`을 최종 모형으로 선택하는 것이 좋아보인다. 
+
+- `dummy_LGBM_28`이 어떤 hyperparameter 조합을 사용했는지 확인:
+```r
+race_results %>% 
+  extract_workflow_set_result(id = 'dummy_LGBM') %>% 
+  select_best(metric = 'f_meas')
+```
+```
+# A tibble: 1 × 7
+   mtry trees min_n tree_depth  learn_rate loss_reduction .config              
+  <int> <int> <int>      <int>       <dbl>          <dbl> <chr>                
+1    10  1495    30         12 0.000340307      0.0639143 Preprocessor1_Model28
+```
+
+이제 hyperparameter tuning 전/후에 대해 training/test set에 대한 3가지 모형의 성능을 비교해보자. 
+
+> [!note]- code fold
+> ```r
+> #### 각 모형의 최적 조합 저장
+> glmnet_best <- race_results %>% 
+>   extract_workflow_set_result(c("dummy_trans_glmnet")) %>% 
+>   select_best(metric = 'f_meas') 
+> RF_best <- race_results %>% 
+>   extract_workflow_set_result(c("dummy_RF")) %>% 
+>   select_best(metric = 'f_meas') 
+> LGBM_best <- race_results %>% 
+>   extract_workflow_set_result(c("dummy_LGBM")) %>% 
+>   select_best(metric = 'f_meas') 
+> 
+> #### 최적 조합으로 각 모형 train/test set에 적합
+> glmnet_test <- race_results %>% 
+>   extract_workflow("dummy_trans_glmnet") %>% 
+>   finalize_workflow(glmnet_best) %>% 
+>   last_fit(split = split, metrics = metric_set(f_meas, roc_auc))
+> RF_test <- race_results %>% 
+>   extract_workflow("dummy_RF") %>% 
+>   finalize_workflow(RF_best) %>% 
+>   last_fit(split = split, metrics = metric_set(f_meas, roc_auc))
+> LGBM_test <- race_results %>% 
+>   extract_workflow("dummy_LGBM") %>% 
+>   finalize_workflow(LGBM_best) %>% 
+>   last_fit(split = split, metrics = metric_set(f_meas, roc_auc))
+> 
+> #### Compare Test vs Resamples
+> train_perf_tuned <- race_results %>% 
+>   rank_results(rank_metric = "f_meas", select_best = T) %>% 
+>   select(mean) %>% 
+>   mutate(model = rep(c("LGBM_tuned", "RF_tuned", "glmnet_tuned"), each = 2),
+>          metric = rep(c("f1", "roc_auc"), 3)) %>% 
+>   select(model, metric, .estimate = mean)
+> 
+> test_perf_tuned <- bind_rows(
+>   glmnet_test %>% 
+>     collect_metrics() %>% 
+>     select(.estimate),
+>   RF_test %>% 
+>     collect_metrics() %>% 
+>     select(.estimate),
+>   LGBM_test %>% 
+>     collect_metrics() %>% 
+>     select(.estimate)
+> ) %>%
+>   mutate(model = rep(c("LGBM_tuned", "RF_tuned", "glmnet_tuned"), each = 2),
+>          metric = rep(c("f1", "roc_auc"), 3)) %>% 
+>   select(model, metric, .estimate)
+> 
+> after_tuning <- train_perf_tuned %>% 
+>   pivot_wider(names_from = metric, values_from = .estimate) %>% 
+>   left_join(
+>     test_perf_tuned %>% 
+>       pivot_wider(names_from = metric, values_from = .estimate),
+>     by = "model", suffix = c("_Train", "_Test"), 
+>   ) 
+> options(pillar.sigfig = 4)
+> perf_table <- bind_rows(before_tuning, after_tuning)
+> perf_table[c(1,2,3,6,5,4), ]  
+> ```
+
+| model        | f1_Train | roc_auc_Train | f1_Test | roc_auc_Test |
+|:------------ | --------:| -------------:| -------:| ------------:|
+| glmnet       |   0.7773 |        0.6603 |  <font style="color:skyblue">0.7807</font> |       <font style="color:skyblue">0.6584</font> |
+| RF           |   0.7665 |        0.6471 |  0.7571 |       0.6528 |
+| LGBM         |   0.7629 |        0.6469 |   0.7550 |       0.6461 |
+| glmnet_tuned |   0.7815 |         0.6590 |  0.7798 |       0.6592 |
+| RF_tuned     |   0.7834 |        0.6555 |  0.7785 |       0.6539 |
+| LGBM_tuned   |   0.7856 |        0.6601 |  0.7794 |       0.6612 |
+Test set에서의 성능을 보면 f1-score 기준으로는 튜닝 전의 Elastic Net이 가장 좋다. RF와 LightGBM은 튜닝 전후 성능의 개선을 꽤 보였지만, 상대적으로 덜 복잡한 모형인 Elastic Net Logistic을 최적의 모형으로 선정했다. 
+
+다음은 최종 선정된 (튜닝 전의)  Elastic Net Logistic 모형의 test set에서의 confusion matrix와 기타 성능을 계산한 것이다.
+
+```r
+#### 최종 모형: Logistic model before tuning
+glmnet_model %>% 
+  collect_predictions() %>% 
+  conf_mat(target, .pred_class)
+```
+```
+          Truth
+Prediction    0    1
+         0 1264  582
+         1  128  276
+```
+
+```r
+test_metrics <- metric_set(accuracy, recall, precision)
+glmnet_model %>% 
+  collect_predictions() %>% 
+  test_metrics(truth = target, estimate = .pred_class)
+```
+```
+# A tibble: 3 × 3
+  .metric   .estimator .estimate
+  <chr>     <chr>          <dbl>
+1 accuracy  binary        0.6844
+2 recall    binary        0.9080
+3 precision binary        0.6847
+```
+
+
+### 04-04. Model Explanation
+
+최종 선택한 Elastic Net Logistic 모형(`glmnet_model`)에 대해 [[CH08. Global Model-Agnostic Methods#08-05. Permutataion Feature Importance|Permutation Feature Importance]]를 먼저 살펴보자:
+
+```r
+glmnet_model %>% 
+  extract_fit_parsnip() %>% 
+  vip::vi()
+```
+```
+# A tibble: 15 × 3
+   Variable          Importance Sign 
+   <chr>                  <dbl> <chr>
+ 1 total_amt         1.35999    POS 
+ 2 max_amt           0.955400   NEG 
+ 3 total_qty         0.264300   POS 
+ 4 freq              0.238045   POS 
+ 5 max_qty           0.179736   NEG 
+ 6 season_Summer     0.115552   POS 
+ 7 avg_amt           0.103792   NEG 
+ 8 Country_UK        0.0750638  POS  
+ 9 max_cnt           0.0660373  NEG  
+10 season_Spring     0.0566886  POS  
+11 season_Winter     0.0373366  POS  
+12 min_amt           0.0360001  POS  
+13 min_qty           0.0326806  POS  
+14 peak_time_Morning 0.00852280 NEG  
+15 min_cnt           0          NEG
+```
+
+```r
+glmnet_model %>% 
+  extract_fit_parsnip() %>% 
+  vip::vip(num_features = 14, horizontal = T) + 
+  theme_light()
+```
+
+![[Pasted image 20240222153352.png|center]]
+
+다음으로 [`kernelshap`](https://github.com/ModelOriented/kernelshap) 패키지와 [`shapviz`](https://cran.r-project.org/web/packages/shapviz/vignettes/basic_use.html) 패키지를 이용해 구현한 SHAP을 통해 살펴보자.
+
+```r
+X <- glm_rec %>% prep() %>% bake(train) %>% select(-c(bsym, CustomerID, target)) %>% as.matrix()
+y <- glm_rec %>% prep() %>% bake(train) %>% pull(target)
+model_tmp <- glmnet(X, y, family = 'binomial', alpha = 1, lambda = 1e-05)
+pf <- function(m, X){
+  predict(m, X, type = "response") %>% as.vector()
+}
+
+set.seed(123)
+X_explain <- glm_rec %>% prep() %>% bake(train) %>% select(-c(bsym, CustomerID, target)) %>% 
+  sample_n(500) %>% 
+  as.matrix()
+X_background <- glm_rec %>% prep() %>% bake(train) %>% select(-c(bsym, CustomerID, target)) %>% 
+  sample_n(200) %>% 
+  as.matrix()
+system.time( # 4 minutes
+  shap_values <- kernelshap::kernelshap(model_tmp, X = X_explain, bg_X = X_background, pred_fun = pf)
+)
+
+shp <- shapviz(shap_values)
+sv_importance(shp, show_numbers = T, max_display = 14) +
+  theme_light()
+```
+
+- Feature Importance:
+
+![[Pasted image 20240222174828.png|center]]
+
+- Summary plot:
+```r
+sv_importance(shp, kind = "bee") +
+  theme_light()
+```
+
+![[Pasted image 20240222175023.png|center]]
+
+- Dependence plot: 변수 중요도 상위 6개 간 플로팅
+```r
+sv_dependence(shp, v = colnames(shp$X)[1:6]) 
+```
+
+![[Pasted image 20240222175311.png|center]]
 

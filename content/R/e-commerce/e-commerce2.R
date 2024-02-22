@@ -18,6 +18,11 @@ suppressPackageStartupMessages({
   library(bonsai)
   library(workflowsets)
   library(viridis)
+  library(iml)
+  library(DALEX)
+  library(DALEXtra)
+  library(shapviz)
+  library(treeshap)
 })
 tidymodels_prefer()
 
@@ -51,13 +56,14 @@ skimr::skim(train %>% select(-c(bsym, CustomerID)))
 
 
 categorical_vars <- train %>% 
-  select(-c(bsym, CustomerID)) %>% 
+  select(-c(bsym, CustomerID, target)) %>% 
   select_if(is.factor) %>% 
   names()
 ## Categorical variables
 plot_categorical <- function(cat){
   cat <- ensym(cat)
   train %>%
+    mutate(target = as.numeric(target) - 1) %>% 
     group_by(!!cat) %>%
     reframe(prop = mean(target, na.rm = T)) %>% 
     mutate(across(!!cat, ~reorder(.x, prop))) %>% 
@@ -87,7 +93,7 @@ num_skew
 
 map_dfr(numeric_vars, ~summary(train %>% pull(.x))) %>% 
   mutate(var = numeric_vars, .before = Min.)
-
+  
 
 basic_rec <- recipe(formula = target ~ ., data = train) 
 basic_rec <- basic_rec %>% 
@@ -146,7 +152,6 @@ plot_numerical <- function(num){
     step_YeoJohnson(all_numeric_predictors()) %>% 
     prep(train) %>% 
     bake(train) %>% 
-    mutate(target = factor(target)) %>% 
     ggplot(aes(x = target, y = !!num, fill = target)) +
     geom_violin(width=1) +
     geom_boxplot(width = 0.3, alpha=0.7) +
@@ -343,6 +348,7 @@ before_tuning <- train_perf %>%
       pivot_wider(names_from = metric, values_from = .estimate),
     by = "model", suffix = c("_Train", "_Test"), 
   )
+before_tuning
 
 ## 04-03. Hyperparameter tuning
 ### Tuning
@@ -399,3 +405,190 @@ tune_wflows <-
 tune_wflows <- tune_wflows %>% 
   option_add(param_info = RF_params, id = "dummy_RF") %>% 
   option_add(param_info = LGBM_params, id = "dummy_LGBM")
+
+#### Racing anova method를 통한 hyperparameter tuning
+# cl <- makePSOCKcluster(8)
+# registerDoParallel(cl)
+# getDoParWorkers()
+# tic()
+# race_ctrl <- control_race(verbose_elim = T,
+#                           save_pred = T,
+#                           save_workflow = T,
+#                           parallel_over = "everything")
+# race_results <- 
+#   tune_wflows %>% 
+#   workflow_map("tune_race_anova",
+#                seed = 1234,
+#                resamples = train_cv,
+#                grid = 50,
+#                control = race_ctrl,
+#                metrics = metric_set(f_meas, roc_auc),
+#                verbose = T)
+# race_results %>% saveRDS("./race_results.rds")
+# toc()
+# stopCluster(cl)
+# registerDoSEQ()
+
+race_results <- readRDS("./race_results.rds")
+
+race_results %>% 
+  rank_results(rank_metric = 'f_meas')
+
+race_results %>% 
+  rank_results(rank_metric = 'f_meas', select_best = T)
+race_results %>% 
+  rank_results(rank_metric = 'roc_auc', select_best = T)
+
+  
+race_results %>% 
+  rank_results() %>%
+  mutate(model_id = paste(wflow_id, str_sub(.config, -2), sep = "_")) %>% 
+  select(wflow_id, model, .config, .metric, mean, std_err, rank, model_id) %>% 
+  mutate(model_id = fct_reorder(model_id, -rank)) %>%
+  {. ->> res} %>% 
+  ggplot(aes(x = model_id, y = mean, color = wflow_id)) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(x = model_id, color = wflow_id, 
+                    ymin = mean - std_err,
+                    ymax = mean + std_err),
+                width = diff(range(res$rank))/25) +
+  facet_wrap(~.metric, scales = "free", nrow = 2) +
+  scale_color_nejm() +
+  coord_flip() +
+  guides(color = 'none') +
+  labs(y = "performance", title = 'Racing method LGBM wins') +
+  theme_light() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.title = element_blank())
+
+
+race_results %>% 
+  extract_workflow_set_result(id = 'dummy_LGBM') %>% 
+  select_best(metric = 'f_meas') 
+
+best_results <- 
+  race_results %>% 
+  extract_workflow_set_result(id = 'dummy_LGBM') %>% 
+  select_best(metric = 'f_meas')
+
+LGBM_best_test_results <- race_results %>% 
+  extract_workflow(id = 'dummy_LGBM') %>% 
+  finalize_workflow(best_results) %>% 
+  last_fit(split = split, metrics = metric_set(f_meas, roc_auc))
+LGBM_best_test_results %>% 
+  collect_metrics()
+
+#### 각 모형의 최적 조합 저장
+glmnet_best <- race_results %>% 
+  extract_workflow_set_result(c("dummy_trans_glmnet")) %>% 
+  select_best(metric = 'f_meas') 
+RF_best <- race_results %>% 
+  extract_workflow_set_result(c("dummy_RF")) %>% 
+  select_best(metric = 'f_meas') 
+LGBM_best <- race_results %>% 
+  extract_workflow_set_result(c("dummy_LGBM")) %>% 
+  select_best(metric = 'f_meas') 
+
+#### 최적 조합으로 각 모형 train/test set에 적합
+glmnet_test <- race_results %>% 
+  extract_workflow("dummy_trans_glmnet") %>% 
+  finalize_workflow(glmnet_best) %>% 
+  last_fit(split = split, metrics = metric_set(f_meas, roc_auc))
+RF_test <- race_results %>% 
+  extract_workflow("dummy_RF") %>% 
+  finalize_workflow(RF_best) %>% 
+  last_fit(split = split, metrics = metric_set(f_meas, roc_auc))
+LGBM_test <- race_results %>% 
+  extract_workflow("dummy_LGBM") %>% 
+  finalize_workflow(LGBM_best) %>% 
+  last_fit(split = split, metrics = metric_set(f_meas, roc_auc))
+
+
+#### Compare Test vs Resamples
+train_perf_tuned <- race_results %>% 
+  rank_results(rank_metric = "f_meas", select_best = T) %>% 
+  select(mean) %>% 
+  mutate(model = rep(c("LGBM_tuned", "RF_tuned", "glmnet_tuned"), each = 2),
+         metric = rep(c("f1", "roc_auc"), 3)) %>% 
+  select(model, metric, .estimate = mean)
+
+
+
+test_perf_tuned <- bind_rows(
+  glmnet_test %>% 
+    collect_metrics() %>% 
+    select(.estimate),
+  RF_test %>% 
+    collect_metrics() %>% 
+    select(.estimate),
+  LGBM_test %>% 
+    collect_metrics() %>% 
+    select(.estimate)
+) %>%
+  mutate(model = rep(c("LGBM_tuned", "RF_tuned", "glmnet_tuned"), each = 2),
+         metric = rep(c("f1", "roc_auc"), 3)) %>% 
+  select(model, metric, .estimate)
+
+
+after_tuning <- train_perf_tuned %>% 
+  pivot_wider(names_from = metric, values_from = .estimate) %>% 
+  left_join(
+    test_perf_tuned %>% 
+      pivot_wider(names_from = metric, values_from = .estimate),
+    by = "model", suffix = c("_Train", "_Test"), 
+  ) 
+options(pillar.sigfig = 4)
+perf_table <- bind_rows(before_tuning, after_tuning)
+perf_table[c(1,2,3,6,5,4), ] %>% 
+  mutate(across(where(is.numeric), ~round(.x, 4))) %>% 
+  write.table("clipboard", sep = "\t", row.names = F)
+  
+#### 최종 모형: Logistic model before tuning
+glmnet_model %>% 
+  collect_predictions() %>% 
+  conf_mat(target, .pred_class)
+
+test_metrics <- metric_set(accuracy, recall, precision)
+glmnet_model %>% 
+  collect_predictions() %>% 
+  test_metrics(truth = target, estimate = .pred_class)
+LGBM_test %>% 
+  collect_predictions() %>% 
+  test_metrics(truth = target, estimate = .pred_class)
+
+
+## 04-04. Model Explanation
+glmnet_model %>% 
+  extract_fit_parsnip() %>% 
+  vip::vi()
+glmnet_model %>% 
+  extract_fit_parsnip() %>% 
+  vip::vip(num_features = 15, horizontal = T) + 
+  theme_light()
+
+X <- glm_rec %>% prep() %>% bake(train) %>% select(-c(bsym, CustomerID, target)) %>% as.matrix()
+y <- glm_rec %>% prep() %>% bake(train) %>% pull(target)
+model_tmp <- glmnet(X, y, family = 'binomial', alpha = 1, lambda = 1e-05)
+pf <- function(m, X){
+  predict(m, X, type = "response") %>% as.vector()
+}
+
+set.seed(123)
+X_explain <- glm_rec %>% prep() %>% bake(train) %>% select(-c(bsym, CustomerID, target)) %>% 
+  sample_n(500) %>% 
+  as.matrix()
+X_background <- glm_rec %>% prep() %>% bake(train) %>% select(-c(bsym, CustomerID, target)) %>% 
+  sample_n(200) %>% 
+  as.matrix()
+system.time( # 4 minutes
+  shap_values <- kernelshap::kernelshap(model_tmp, X = X_explain, bg_X = X_background, pred_fun = pf)
+)
+
+shp <- shapviz(shap_values)
+sv_importance(shp, show_numbers = T, max_display = 14) +
+  theme_light()
+sv_importance(shp, kind = "bee") +
+  theme_light()
+  
+sv_dependence(shp, v = colnames(shp$X)[1:6])
+glmnet_model
