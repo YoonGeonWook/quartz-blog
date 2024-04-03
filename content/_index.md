@@ -9,9 +9,13 @@ Welcome!
 - 왼쪽 상단의 검색창을 사용하거나 `ctrl+k`/`cmd+k`를 눌러서 원하는 내용을 검색할 수 있습니다.
 
 </br>
-- [[Recursive Feature Elimination|RFE와 RFE-CV를 통한 변수 선택]]
+
+- **<font style="color:skyblue">ML</font>**
+	- [[Recursive Feature Elimination|RFE와 RFE-CV를 통한 변수 선택]]
+
 - **<font style="color:skyblue">실습 프로젝트</font>**
 	- [[e-commerce data analysis|E-commece 데이터분석]]
+
 - **<font style="color:skyblue">Anomaly Detection</font>** 
 	- [[0. Overview|Overview]]
 	- [[1. (Mixture of) Gaussian Density Estimation|Gaussian Density Estimation]]
@@ -20,6 +24,7 @@ Welcome!
 	- [[5. Auto-Encoder, 1-SVM, SVDD|Auto-Encoder, 1-SVM, SVDD]]
 	- [[6. Isolation Forest and Its Variations|Isolation Forest]]
 	- [[7. RRCF|Robust Random Cut Forest]]
+
 - **<font style="color:skyblue">XAI</font>** : [Interpretable Machine Learning(Christoph Molnar)](https://christophm.github.io/interpretable-ml-book/)
 	- [[CH03. Interpretability|Interpretability]]
 	- [[CH04. Datasets|Datasets]]
