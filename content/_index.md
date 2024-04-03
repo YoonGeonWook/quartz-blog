@@ -15,6 +15,7 @@ Welcome!
 
 - **<font style="color:skyblue">실습 프로젝트</font>**
 	- [[e-commerce data analysis|E-commece 데이터분석]]
+	- [[Kaggle - Regression with a Crab Age Dataset]]
 
 - **<font style="color:skyblue">Anomaly Detection</font>** 
 	- [[0. Overview|Overview]]
