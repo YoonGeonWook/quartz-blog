@@ -9,7 +9,7 @@ Welcome!
 - 왼쪽 상단의 검색창을 사용하거나 `ctrl+k`/`cmd+k`를 눌러서 원하는 내용을 검색할 수 있습니다.
 
 </br>
-
+- [[Recursive Feature Elimination|RFE와 RFE-CV를 통한 변수 선택]]
 - **<font style="color:skyblue">실습 프로젝트</font>**
 	- [[e-commerce data analysis|E-commece 데이터분석]]
 - **<font style="color:skyblue">Anomaly Detection</font>** 
