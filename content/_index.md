@@ -12,6 +12,7 @@ Welcome!
 
 - **<font style="color:skyblue">ML</font>**
 	- [[Recursive Feature Elimination|RFE와 RFE-CV를 통한 변수 선택]]
+	- [[Early Stopping with XGBoost]]
 
 - **<font style="color:skyblue">실습 프로젝트</font>**
 	- [[e-commerce data analysis|E-commece 데이터분석]]

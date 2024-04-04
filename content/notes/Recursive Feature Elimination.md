@@ -352,5 +352,5 @@ learner$train(task)
 이제 학습된 모델을 사용해 새로운 외부 데이터를 예측할 수 있다.
 
 
-- https://mlr-org.com/gallery/optimization/2023-02-07-recursive-feature-elimination/
+- 출처: [RFE & RFE-CV: mlr-org/gallery](https://mlr-org.com/gallery/optimization/2023-02-07-recursive-feature-elimination/)
 
