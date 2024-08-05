@@ -33,7 +33,7 @@ export const defaultContentPageLayout: PageLayout = {
         title: "Recent Study",
         limit: 4,
         filter: (f) =>
-          f.slug!.startsWith("notes/") && !f.frontmatter?.noindex,
+          f.slug!.startsWith("notes/") || f.slug!.startsWith("boostcamp/") && !f.frontmatter?.noindex,
         linkToMore: "notes/" as SimpleSlug,
       }),
     ),

@@ -10,6 +10,9 @@ Welcome!
 
 </br>
 
+- **<font style="color:skyblue">BoostCamp AI Tech: RecSys</font>**
+	- [[(1주차) PyTorch]]
+
 - **<font style="color:skyblue">ML</font>**
 	- [[Recursive Feature Elimination|RFE와 RFE-CV를 통한 변수 선택]]
 	- [[Early Stopping with XGBoost]]
