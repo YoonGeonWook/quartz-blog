@@ -4,7 +4,9 @@ tags:
   - AI_Tech
   - BoostCamp
   - Pytorch
+  - Lv1
 ---
+
 # 1. PyTorch Intro
 
 ## 1.1 PyTorch
