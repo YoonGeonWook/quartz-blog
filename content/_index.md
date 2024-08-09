@@ -10,28 +10,39 @@ Welcome!
 
 </br>
 
-- **<font style="color:skyblue">BoostCamp AI Tech: RecSys</font>**
-	- [[(1주차) PyTorch]]
+### **<font style="color:skyblue">BoostCamp AI Tech: RecSys</font>**
 
-- **<font style="color:skyblue">ML</font>**
-	- [[Recursive Feature Elimination|RFE와 RFE-CV를 통한 변수 선택]]
-	- [[Early Stopping with XGBoost]]
+#### Week1: 
 
-- **<font style="color:skyblue">실습 프로젝트</font>**
-	- [[e-commerce data analysis|E-commece 데이터분석]]
-	- [[Kaggle - Regression with a Crab Age Dataset]]
-	- [[Kaggle - Binary Classification with a Bank Churn Dataset]]
+- [[Day01) 파이토치 자료형 & 기본 함수]]
+- [[Day02) 텐서 생성 및 조작]]
+- [[Day03) 텐서의 기본 연산 & 벡터 행렬 연산]]
+- [[Day04) Linear Regression]]
+- [[Day05) Classification]]
 
-- **<font style="color:skyblue">Anomaly Detection</font>** 
-	- [[0. Overview|Overview]]
-	- [[1. (Mixture of) Gaussian Density Estimation|Gaussian Density Estimation]]
-	- [[3. Local Outlier Factor (LOF)|Local Outlier Factor]]
-	- [[4. Distance-based Methods|Distance-based Methods]]
-	- [[5. Auto-Encoder, 1-SVM, SVDD|Auto-Encoder, 1-SVM, SVDD]]
-	- [[6. Isolation Forest and Its Variations|Isolation Forest]]
-	- [[7. RRCF|Robust Random Cut Forest]]
+### **<font style="color:skyblue">ML</font>**
 
-- **<font style="color:skyblue">XAI</font>** : [Interpretable Machine Learning(Christoph Molnar)](https://christophm.github.io/interpretable-ml-book/)
+- [[Recursive Feature Elimination|RFE와 RFE-CV를 통한 변수 선택]]
+- [[Early Stopping with XGBoost]]
+
+### **<font style="color:skyblue">실습 프로젝트</font>**
+
+- [[e-commerce data analysis|E-commece 데이터분석]]
+- [[Kaggle - Regression with a Crab Age Dataset]]
+- [[Kaggle - Binary Classification with a Bank Churn Dataset]]
+
+### **<font style="color:skyblue">Anomaly Detection</font>**
+
+- [[0. Overview|Overview]]
+- [[1. (Mixture of) Gaussian Density Estimation|Gaussian Density Estimation]]
+- [[3. Local Outlier Factor (LOF)|Local Outlier Factor]]
+- [[4. Distance-based Methods|Distance-based Methods]]
+- [[5. Auto-Encoder, 1-SVM, SVDD|Auto-Encoder, 1-SVM, SVDD]]
+- [[6. Isolation Forest and Its Variations|Isolation Forest]]
+- [[7. RRCF|Robust Random Cut Forest]]
+
+### **<font style="color:skyblue">XAI</font>** : 
+- [Interpretable Machine Learning(Christoph Molnar)](https://christophm.github.io/interpretable-ml-book/)
 	- [[CH03. Interpretability|Interpretability]]
 	- [[CH04. Datasets|Datasets]]
 	- [[CH05. Interpretable Methods|Interpretable Methods - Model Specific Methods]]

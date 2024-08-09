@@ -1,12 +1,13 @@
 ---
+sticker: emoji//1f4d8
 tags:
   - Deep_Learning
   - AI_Tech
   - BoostCamp
   - Pytorch
-  - Lv1
+  - tensor
+  - 자료형
 ---
-
 # 1. PyTorch Intro
 
 ## 1.1 PyTorch
@@ -363,7 +364,7 @@ torch.int64 최소값: -9,223,372,036,854,775,808
 - 언어적 표현: 16bit로 숫자를 _정수부_ 와 _소수부_ 로 표현
 - 공간 표현: 
 
-![[Pasted image 20240805183222.png|700]]
+![[Pasted image 20240806101805.png|700]]
 
 - 고정 소수점의 문제: 102.005와 같은 수를 고정 소수점으로 표현하기 위해선 소수부의 각 자릿수를 따로 저장해야 함
 	- 즉, 소수부 각 자리마다 4bit가 필요
@@ -630,4 +631,3 @@ l.numel() =  8
 ```
 
 ---
-
