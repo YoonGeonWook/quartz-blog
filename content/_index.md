@@ -10,7 +10,7 @@ Welcome!
 
 </br>
 
-### **<font style="color:skyblue">BoostCamp AI Tech: RecSys</font>**
+## BoostCamp AI Tech: RecSys
 
 #### Week1: 
 
@@ -20,18 +20,24 @@ Welcome!
 - [[Day04) Linear Regression]]
 - [[Day05) Classification]]
 
-### **<font style="color:skyblue">ML</font>**
+---
+
+## ML
 
 - [[Recursive Feature Elimination|RFE와 RFE-CV를 통한 변수 선택]]
 - [[Early Stopping with XGBoost]]
 
-### **<font style="color:skyblue">실습 프로젝트</font>**
+---
+
+## 실습 프로젝트
 
 - [[e-commerce data analysis|E-commece 데이터분석]]
 - [[Kaggle - Regression with a Crab Age Dataset]]
 - [[Kaggle - Binary Classification with a Bank Churn Dataset]]
 
-### **<font style="color:skyblue">Anomaly Detection</font>**
+---
+
+## Anomaly Detection
 
 - [[0. Overview|Overview]]
 - [[1. (Mixture of) Gaussian Density Estimation|Gaussian Density Estimation]]
@@ -41,7 +47,10 @@ Welcome!
 - [[6. Isolation Forest and Its Variations|Isolation Forest]]
 - [[7. RRCF|Robust Random Cut Forest]]
 
-### **<font style="color:skyblue">XAI</font>** : 
+---
+
+## XAI
+
 - [Interpretable Machine Learning(Christoph Molnar)](https://christophm.github.io/interpretable-ml-book/)
 	- [[CH03. Interpretability|Interpretability]]
 	- [[CH04. Datasets|Datasets]]
