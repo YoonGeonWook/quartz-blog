@@ -30,17 +30,25 @@ export const defaultContentPageLayout: PageLayout = {
     Component.Darkmode(),
     Component.DesktopOnly(
       Component.RecentNotes({
-        title: "Recent Study",
-        limit: 4,
+        title: "Recent Study Notes",
+        limit: 2,
         filter: (f) =>
-          f.slug!.startsWith("notes/") || f.slug!.startsWith("boostcamp/") && !f.frontmatter?.noindex,
+          f.slug!.startsWith("notes/")&& !f.frontmatter?.noindex,
         linkToMore: "notes/" as SimpleSlug,
       }),
     ),
     Component.DesktopOnly(
       Component.RecentNotes({
+        title: "Recent Boostcamp Notes",
+        limit: 2,
+        filter: (f) => f.slug!.startsWith("BoostCamp_W1/"),
+        linkToMore: "BoostCamp_W1/" as SimpleSlug,
+      }),
+    ),
+    Component.DesktopOnly(
+      Component.RecentNotes({
         title: "Recent Project",
-        limit: 3,
+        limit: 2,
         filter: (f) => f.slug!.startsWith("project/"),
         linkToMore: "project/" as SimpleSlug,
       }),
